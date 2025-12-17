@@ -54,7 +54,7 @@ class Reaction():
                 a[i] = 0
                 continue
             assert (r >= 0).any(), "Negative rate!"
-            a[i] = s['rate']*np.product(r)
+            a[i] = s['rate']*np.prod(r)
         a[-1] = np.sum(a)
         return a
 
@@ -156,12 +156,9 @@ class ReactionEnsemble(Reaction):
         '''
         Restore initial conditions to start another Reaction in the ensemble
         '''
-
-        # x_f = self.x_series[-1]
-        # self.stain_counts.append({'t': self.t_series[-1], 'Colourless': sum(x_f[0:3]), 'Blue': sum(x_f[3:6]), 'Purple': sum(x_f[6:9]), 'Red': sum(x_f[9:12])})
         self.x = x_0
         self.t = t_0
-        # print(x_0, t_0)
+
 
     def _setup_extras(self, extras):
         self.stain_counts = []

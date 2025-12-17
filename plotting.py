@@ -183,7 +183,7 @@ def peak_splines(df, x, y, grouping, n_groups, colours='Blues', extremum='max'):
 				showlegend=False
 			))
 		else:
-			print('PANIC')
+			print('Please enter either max or min to mark extrema.')
 
 	# To make the colourscale consistent between all curves and only appear once
 	fig.add_trace(go.Scatter(
@@ -230,7 +230,7 @@ def peak_splines(df, x, y, grouping, n_groups, colours='Blues', extremum='max'):
 		linewidth=1,
 		linecolor='black',
 		mirror=True,
-		range=[1.0, 12.01],
+		# range=[1.0, 12.01],
 		dtick=1,
 	)
 	# fig.update_layout(
@@ -250,7 +250,7 @@ def peak_splines(df, x, y, grouping, n_groups, colours='Blues', extremum='max'):
 		linewidth=1,
 		linecolor='black',
 		mirror=True,
-		range=[0.0, 20.0]
+		# range=[0.0, 20.0]
 	)
 	return fig
 
@@ -490,10 +490,8 @@ def plotly_bar(categories: List[str], heights: List[float], colours: List[str]):
 DATA IMPORT PART
 '''
 #%%
-if 'utils' != os.getcwd()[-5:]:
-	os.chdir('utils')
-print('Reading file')
-df = pd.read_json('DL bootstrap 11:07:2024 concatted.json') # Can take a while for larger datasets
+print('Reading files')
+df = pd.read_json('data/DL bootstrap 2025-12-03.json') # Mahalanobis distance used
 print('k1 values: ', df['k1'].unique(), ';', len(df['k1'].unique()), 'unique values of k1.')
 print('k2 values: ', df['k2'].unique(), ';', len(df['k2'].unique()), 'unique values of k2.')
 df['tg1'] = 1/df['k1']
@@ -506,6 +504,21 @@ for k in ['k1', 'k2']:
 	df[f'Relative error {k}'] = (df[k] - df[f'Mean inferred {k}'])/df[f'Std inferred {k}']
 df['Total cells at end'] = df['Mean EdU+BrdU+']+df['Mean EdU-BrdU+']+df['Mean EdU+BrdU-']+df['Mean EdU-BrdU-']
 df['Labelled fraction'] = 1 - df['Mean EdU-BrdU-']/df['Total cells at end']
+
+#%%
+df_preprint = pd.read_json('DL bootstrap 11:07:2024-big concatted.json') # Can take a while for larger datasets
+print('k1 values: ', df_preprint['k1'].unique(), ';', len(df_preprint['k1'].unique()), 'unique values of k1.')
+print('k2 values: ', df_preprint['k2'].unique(), ';', len(df_preprint['k2'].unique()), 'unique values of k2.')
+df_preprint['tg1'] = 1/df_preprint['k1']
+df_preprint['ts'] = 1/df_preprint['k2']
+df_preprint['tg2m'] = 1/df_preprint['k3']
+df_preprint['x'] = df_preprint['Initial G1']/(df_preprint['Initial G1']+df_preprint['Initial S']+df_preprint['Initial G2M'])
+df_preprint['y'] = df_preprint['Initial S']/(df_preprint['Initial G1']+df_preprint['Initial S']+df_preprint['Initial G2M'])
+df_preprint['z'] = df_preprint['Initial G2M']/(df_preprint['Initial G1']+df_preprint['Initial S']+df_preprint['Initial G2M'])
+for k in ['k1', 'k2']:
+	df_preprint[f'Relative error {k}'] = (df_preprint[k] - df_preprint[f'Mean inferred {k}'])/df_preprint[f'Std inferred {k}']
+df_preprint['Total cells at end'] = df_preprint['Mean EdU+BrdU+']+df_preprint['Mean EdU-BrdU+']+df_preprint['Mean EdU+BrdU-']+df_preprint['Mean EdU-BrdU-']
+df_preprint['Labelled fraction'] = 1 - df_preprint['Mean EdU-BrdU-']/df_preprint['Total cells at end']
 
 '''
 PLOTTING BELOW
@@ -523,8 +536,8 @@ Either run code from below or type in an interactive window
 # %%
 # hex_opt_plot(df, 'tg1', 'ts', 'tg2m', 'BrdU time', 'SNR k2')
 # %%
-peak_splines(df, 'BrdU time', 'SNR k2', 'ts', 'Blues', extremum='max')
-# peak_splines(df, 'BrdU time', 'SNR k1', 'tg1+tg2m', 'Reds', exremum='min')
+# peak_splines(df, 'BrdU time', 'SNR k2', 'ts', 7, 'Blues', extremum='max')
+peak_splines(df, 'BrdU time', 'SNR k1', 'tg1', 7, 'Reds', extremum='min')
 # %%
 opt_dt_vs_x(df, x='ts', grouping='tg1', opt_indep='BrdU time', opt_score='SNR k2')
 # %%

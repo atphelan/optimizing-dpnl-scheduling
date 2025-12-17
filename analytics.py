@@ -349,7 +349,7 @@ def solve_from_k(k1, k2, k3, t_wait):
         [0,    0,  -2*k3,  0,   k2,   0,   0,   2*k3, -k1-k3],#G2M*G1
         #G1    S    G2M   G1^2  G1*S S^2 S*G2M  G2M^2 G2M*G1
     ])
-    # Set up experiment
+    # Set up experiment, edge case checks
     check_noninstant = np.array([k1, k2, k3]) < 1E10
     if k1 < 1E10:
         K2 = k2/k1
@@ -407,6 +407,8 @@ def solve_from_k(k1, k2, k3, t_wait):
     if np.sum(K > 1E308) > 0:
         raise ValueError('Failed to reduce dimension of problem, please debug.')
     # print(np.round(K, 3))
+    
+    
     dalldt = lambda t, v: K.dot(v.T)
     edu_sp = initial_state.copy()
     edu_sp[0] = 0.0; edu_sp[2:5] = 0.0; edu_sp[6:] = 0.0 # Clear everything except S phase and S phase squared
@@ -460,5 +462,12 @@ def solve_from_k(k1, k2, k3, t_wait):
             'Std EdU-BrdU-': get_var_n(dn)**0.5,
         }
     ])], axis='columns')
+    # M_obs = np.array([analytic_df[f'Mean {gate}'] for gate in gates])
+    # counts_cov = M_obs @ Sigma_final @ M_obs.T
 
     return analytic_df
+
+
+if __name__ == '__main__':
+    print(solve_from_k(0.087656, 0.103810, 0.337980, 4.0))
+
