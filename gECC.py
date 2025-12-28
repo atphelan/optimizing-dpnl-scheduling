@@ -158,8 +158,8 @@ class DualLabelingEnsemble(ReactionEnsemble):
 
     def run_ensemble(self, repeats, run_type='lookup', noisy_initial=False, cov=None):
         self.repeats = repeats
-        self.pre_brdu_states = np.zeros((repeats, 12))
-        self.end_states = np.zeros((repeats, 12))
+        self.pre_brdu_states = np.zeros((repeats, len(self.x)))
+        self.end_states = np.zeros((repeats, len(self.x)))
         for i in range(repeats):
             self.run_simulation(i, repeats)
             self.end_states[i] = self.x.copy()
@@ -283,22 +283,6 @@ class DualLabelingBatch(DualLabelingEnsemble):
         else:
             self.x = x_0
             self.t = t_0
-        
-
-    def _initialise_ensemble_erlang(self, ps, n_steps, noisy_initial=False):
-        self.k1 = ps['k1']
-        self.k2 = ps['k2']
-        self.k3 = ps['k3']
-        self.edu_time = 0 # Will set to np.inf after staining to avoid re-staining and to minimise variables
-        self.brdu_time = ps['brdu_t'] # likewise
-        self.measurement_time = ps['wait_t']+ps['brdu_t'] # end of simulation here
-        self.cycle_period = (1/self.k1 + 1/self.k2 + 1/self.k3)
-        if noisy_initial:
-            self.run_until_n_for_initial(300) # Sets self.x inside
-        else:
-            self.x = generate_steady_state(ps['k2']/ps['k1'], ps['k3']/ps['k1'], ps['n'], padding=9)
-        self.x_series = [self.x.copy()]
-        self._edit_stoichiometry() # set rates for this run
 
 
     def run_batch(self, batch_parameters, repeats, n_parameter_combos, noisy_initial=False, cov_file = None):
@@ -405,7 +389,9 @@ class DualLabelingBatch(DualLabelingEnsemble):
         the noisy dual pulse nucleoside labeling simulation inference process
         '''
         self.ensemble_data = pd.DataFrame([])
-        report_after_n = n_parameter_combos//10 if n_parameter_combos >= 10 else 1
+        n_steps_progress = 10  # report 10%,20%,...,100%
+        progress_thresholds = {round(len(bootstrap_parameters) * p / n_steps_progress): p*10 for p in range(1, n_steps_progress+1)}
+        next_progress = min(progress_thresholds.keys()) if progress_thresholds else None
         print("Starting at datetime {}...".format(str(datetime.now())))
 
         try:
@@ -434,8 +420,10 @@ class DualLabelingBatch(DualLabelingEnsemble):
                     self._initialise_ensemble(ps, noisy_initial, cov)
                     # run (small-ish) ensemble
                     self.run_ensemble(repeats, run_type='bootstrap', noisy_initial=noisy_initial, cov=cov) # Should save n_experiments rows that use the same parameters, so can just aggregate.
-            if ps['idx'] % report_after_n == 0:
-                print(f"Completed {10*(ps['idx']//report_after_n)}% of runs at datetime {str(datetime.now())}")
+                if next_progress is not None and counter >= next_progress:
+                    print(f'{progress_thresholds[next_progress]}% of parameter combinations complete.')
+                    del progress_thresholds[next_progress]
+                    next_progress = min(progress_thresholds.keys()) if progress_thresholds else None
             counter += 1
         self.summary_data = self.summarise_k().reset_index(drop=True)
         print("Completed all runs at {}.".format(str(datetime.now())))
@@ -511,7 +499,7 @@ def generate_steady_state_erlang(K2, K3, n, n_steps=10, padding=0):
         np.array([*([0]*(2*n_steps-1)), K2, -K3, *([0]*(n_steps-1))]),
         *g2m_rows
     ]
-    T = np.array(T)/n_steps
+    T = np.array(T)*n_steps
     f = lambda x, T: np.dot(T, x) + T[-1,-1] * x[-1] * x
     sol, _, ier, mesg = fsolve(f, x0=np.array([0.33,0.34,0.33]*n_steps)/n_steps, args=(T,), full_output=True)
     if ier == 1 and sol.all() != 0.0:
@@ -521,6 +509,72 @@ def generate_steady_state_erlang(K2, K3, n, n_steps=10, padding=0):
     else:
         print("No solution found.")
         return ValueError(mesg)
+    
+
+from scipy.linalg import null_space
+
+def generate_steady_state_erlang_fast(
+    K2, K3, n, n_steps=10, padding=0
+):
+    """
+    Steady-state mean occupancy for a 3-phase Erlang cell cycle.
+
+    K2 = k2 / k1
+    K3 = k3 / k1
+    n  = total population size
+    """
+
+    N = 3 * n_steps
+
+    # --- build generator T ---
+    T = np.zeros((N, N))
+
+    # G1 chain
+    for i in range(n_steps - 1):
+        T[i, i]       -= 1
+        T[i + 1, i]   += 1
+
+    # G1 -> S
+    T[n_steps, n_steps - 1] += 1
+    T[n_steps - 1, n_steps - 1] -= 1
+
+    # S chain
+    for i in range(n_steps, 2*n_steps - 1):
+        T[i, i]     -= K2
+        T[i + 1, i] += K2
+
+    # S -> G2M
+    T[2*n_steps, 2*n_steps - 1] += K2
+    T[2*n_steps - 1, 2*n_steps - 1] -= K2
+
+    # G2M chain
+    for i in range(2*n_steps, 3*n_steps - 1):
+        T[i, i]     -= K3
+        T[i + 1, i] += K3
+
+    # division: G2M_last → 2 G1_0
+    T[0, -1] += 2 * K3
+    T[-1, -1] -= K3
+
+    # Erlang scaling
+    T *= n_steps
+
+    # --- steady state via nullspace ---
+    ns = null_space(T)
+    if ns.size == 0:
+        raise RuntimeError("No steady state found")
+
+    x = ns[:, 0]
+    x = np.abs(x)
+    x /= x.sum()
+    x *= n
+
+    # --- output ---
+    out = np.zeros(N + padding)
+    out[:N] = np.round(x)
+
+    return out
+
 
 
 def generate_params_for_k_sweep(G1_list, S_list, edu_times, brdu_times, wait_times, periods, ns, repeat_ensembles=None):
@@ -654,7 +708,7 @@ def erlang_stoichiometries_4labels(n_steps, k1, k2, k3,
 
     n_labels = len(labels)
     n_phases = 3
-    k1, k2, k3 = np.array([k1, k2, k3])/n_steps
+    k1, k2, k3 = np.array([k1, k2, k3])*n_steps
     N = n_labels * n_phases * n_steps
 
     def idx(label, phase, step):
@@ -664,11 +718,10 @@ def erlang_stoichiometries_4labels(n_steps, k1, k2, k3,
     stoichs = []
 
     for l, lname in enumerate(labels):
-
         # ---- G1 chain ----
         for i in range(n_steps - 1):
-            pre = np.zeros(N)
-            post = np.zeros(N)
+            pre = np.zeros(N).astype(int)
+            post = np.zeros(N).astype(int)
             pre[idx(l, 0, i)] = 1
             post[idx(l, 0, i + 1)] = 1
             stoichs.append({
@@ -676,10 +729,9 @@ def erlang_stoichiometries_4labels(n_steps, k1, k2, k3,
                 'stoich': (pre, post),
                 'rate': k1
             })
-
         # G1 -> S
-        pre = np.zeros(N)
-        post = np.zeros(N)
+        pre = np.zeros(N).astype(int)
+        post = np.zeros(N).astype(int)
         pre[idx(l, 0, n_steps - 1)] = 1
         post[idx(l, 1, 0)] = 1
         stoichs.append({
@@ -687,11 +739,10 @@ def erlang_stoichiometries_4labels(n_steps, k1, k2, k3,
             'stoich': (pre, post),
             'rate': k1
         })
-
         # ---- S chain ----
         for i in range(n_steps - 1):
-            pre = np.zeros(N)
-            post = np.zeros(N)
+            pre = np.zeros(N).astype(int)
+            post = np.zeros(N).astype(int)
             pre[idx(l, 1, i)] = 1
             post[idx(l, 1, i + 1)] = 1
             stoichs.append({
@@ -699,10 +750,9 @@ def erlang_stoichiometries_4labels(n_steps, k1, k2, k3,
                 'stoich': (pre, post),
                 'rate': k2
             })
-
         # S -> G2M
-        pre = np.zeros(N)
-        post = np.zeros(N)
+        pre = np.zeros(N).astype(int)
+        post = np.zeros(N).astype(int)
         pre[idx(l, 1, n_steps - 1)] = 1
         post[idx(l, 2, 0)] = 1
         stoichs.append({
@@ -710,11 +760,10 @@ def erlang_stoichiometries_4labels(n_steps, k1, k2, k3,
             'stoich': (pre, post),
             'rate': k2
         })
-
         # ---- G2M chain ----
         for i in range(n_steps - 1):
-            pre = np.zeros(N)
-            post = np.zeros(N)
+            pre = np.zeros(N).astype(int)
+            post = np.zeros(N).astype(int)
             pre[idx(l, 2, i)] = 1
             post[idx(l, 2, i + 1)] = 1
             stoichs.append({
@@ -722,10 +771,9 @@ def erlang_stoichiometries_4labels(n_steps, k1, k2, k3,
                 'stoich': (pre, post),
                 'rate': k3
             })
-
         # Division: G2M_n -> 2 G1_1
-        pre = np.zeros(N)
-        post = np.zeros(N)
+        pre = np.zeros(N).astype(int)
+        post = np.zeros(N).astype(int)
         pre[idx(l, 2, n_steps - 1)] = 1
         post[idx(l, 0, 0)] = 2
         stoichs.append({
@@ -747,6 +795,25 @@ class DualLabelingBatchErlang(DualLabelingBatch):
 
     def _stoichiometry(self):
         return erlang_stoichiometries_4labels(self.n_steps, self.k1, self.k2, self.k3)
+    
+    def _tag_edu(self):
+        '''
+        Stain all cells in S phase to become EdU+.
+        '''
+        self.x[4*self.n_steps:5*self.n_steps] += self.x[self.n_steps:2*self.n_steps]           
+        self.x[self.n_steps:2*self.n_steps] = 0
+
+
+    def _tag_brdu(self, i=1):
+        '''
+        Stain all cells in S phase to become BrdU+, accounting for cells already stained with EdU.
+        '''
+        self.pre_brdu_states[i] = self.x.copy()
+        self.x[7*self.n_steps:8*self.n_steps] += self.x[4*self.n_steps:5*self.n_steps]
+        self.x[10*self.n_steps:11*self.n_steps] += self.x[self.n_steps:2*self.n_steps]
+        self.x[self.n_steps:2*self.n_steps] = 0
+        self.x[4*self.n_steps:5*self.n_steps] = 0
+
 
     def save_data(self, run_type='lookup'):
         new_row = {
@@ -754,9 +821,9 @@ class DualLabelingBatchErlang(DualLabelingBatch):
             "k2": self.k2,
             "k3": self.k3,
             "Cycle period": self.cycle_period,
-            "Initial G1": self.x_series[0][0],
-            "Initial S": self.x_series[0][1],
-            "Initial G2M": self.x_series[0][2],
+            "Initial G1": sum(self.x_series[0][0:self.n_steps]),
+            "Initial S": sum(self.x_series[0][self.n_steps:2*self.n_steps]),
+            "Initial G2M": sum(self.x_series[0][2*self.n_steps:3*self.n_steps]),
             "EdU time": self.edu_time,
             "BrdU time": self.brdu_time,
             "Wait time": self.measurement_time - self.brdu_time,
@@ -779,6 +846,37 @@ class DualLabelingBatchErlang(DualLabelingBatch):
             new_row.update({'Mean inferred k1': k1, 'Mean inferred k2': k2})
         self.ensemble_data = pd.concat([self.ensemble_data, pd.DataFrame([new_row])], ignore_index=True)
 
+    def _initialise_ensemble(self, ps, noisy_initial=False, cov=None):
+        self.k1 = ps['k1']
+        self.k2 = ps['k2']
+        self.k3 = ps['k3']
+        self.edu_time = 0 # Will set to np.inf after staining to avoid re-staining and to minimise variables
+        self.brdu_time = ps['brdu_t'] # likewise
+        self.measurement_time = ps['wait_t']+ps['brdu_t'] # end of simulation here
+        self.cycle_period = (1/self.k1 + 1/self.k2 + 1/self.k3)
+        self._edit_stoichiometry() # set rates for this run
+        self.x_0 = generate_steady_state_erlang(ps['k2']/ps['k1'], ps['k3']/ps['k1'], ps['n'], n_steps=self.n_steps, padding=9*self.n_steps)
+        self.x = self.x_0.copy()
+        assert (self.x_0 >= 0).all(), 'Negative terms in steady state!'
+        if noisy_initial:
+            # self.run_until_n_for_initial(ps['n']) # Sets self.x inside
+            # self.x[0:3] += np.multiply(np.random.randn(3), np.sqrt(self.x[0:3])).round().astype(int)
+            self.x[0:3] += np.random.multivariate_normal([0.0, 0.0, 0.0], cov)/10
+            assert (self.x >= 0).all(), 'Negative terms in initial state! Reduce noise contribution.'
+        self.x = self.x.round().astype(int)
+        self.x_0 = self.x_0.round().astype(int)
+        self.x_series = [self.x.copy()]
+
+    def _edit_stoichiometry(self):
+        k1, k2, k3 = np.array([self.k1, self.k2, self.k3])*self.n_steps
+        for i, s in enumerate(self.stoich):
+            if "$G_1" in s['name']:
+                self.stoich[i]['rate'] = k1
+            if "$S" in s['name']:
+                self.stoich[i]['rate'] = k2
+            if "$G_2M" in s['name']:
+                self.stoich[i]['rate'] = k3
+
 
 def make_lookup_erlang(n_steps=10, noisy_initial=False, jobs=1): # Make a look-up table of cell cycle phase rates and inter-pulse waiting times
     edu_time = [0]
@@ -791,24 +889,24 @@ def make_lookup_erlang(n_steps=10, noisy_initial=False, jobs=1): # Make a look-u
     # S_list = np.linspace(6,12,40)
     k_points = hex_param_mesh(np.array([11,8,5]), 1/np.sqrt(6)*np.array([2,-1,-1]), 1/np.sqrt(6)*np.array([-1,-1,2])*0.5, 6)
 
-    DoubleStainBatch = DualLabelingBatch(
+    DoubleStainBatch = DualLabelingBatchErlang(
         t_0=0,
-        x_0=np.array([0]*12),
-        extras=[jobs, n_steps] # Jobs
+        x_0=np.array([0]*12*n_steps),
+        extras=[jobs, n_steps]
     )
     
 
     params = param_sweep_k_predefined(k_points, edu_time, brdu_time, wait_time, period, n)
     DoubleStainBatch.run_batch(
         batch_parameters = params,
-        repeats = 2,
+        repeats = 80,
         n_parameter_combos = len(params),
         noisy_initial = noisy_initial
     )
     try: # If a pbs array index is found, this means the code is being run in parallel on the cluster and there will be multiple output files
-        DoubleStainBatch.ensemble_data.to_csv(f"data/DL lookup {datetime.today().date()} {int(os.environ['PBS_ARRAY_INDEX'])} erlang.csv")
+        DoubleStainBatch.ensemble_data.to_csv(f"data/DL lookup {datetime.today().date()} {int(os.environ['PBS_ARRAY_INDEX'])} erlang {n_steps}.csv")
     except:
-        DoubleStainBatch.ensemble_data.to_csv(f"data/DL lookup {datetime.today().date()} erlang.csv")
+        DoubleStainBatch.ensemble_data.to_csv(f"data/DL lookup {datetime.today().date()} erlang {n_steps}.csv")
 
 
 def run_bootstrap(lookup_path, jobs=1, noisy_initial=False, cov_file=None):
@@ -850,7 +948,7 @@ def run_bootstrap(lookup_path, jobs=1, noisy_initial=False, cov_file=None):
         DoubleStainBatch.summary_data.to_json(f"data/DL bootstrap {datetime.today().date()}.json")
     # Saving these in json to preserve np array and not lose all readability & keep library version generality
 
-def run_bootstrap_erlang(lookup_path, jobs=1, noisy_initial=False):
+def run_bootstrap_erlang(lookup_path, jobs=1, n_steps=10, noisy_initial=False):
     edu_time = [0]
     brdu_time = list(range(1, 13, 1))
     wait_time = [0.5]
@@ -859,21 +957,32 @@ def run_bootstrap_erlang(lookup_path, jobs=1, noisy_initial=False):
     n = [300]
     # G1_list = np.linspace(7,17,20)
     # S_list = np.linspace(6,12,40)
-    k_points = hex_param_mesh(np.array([11,8,5]), 1/np.sqrt(6)*np.array([2,-1,-1]), 1/np.sqrt(6)*np.array([-1,-1,2])*0.5, 6)
+    # k_points = hex_param_mesh(np.array([11,8,5]), 1/np.sqrt(6)*np.array([2,-1,-1]), 1/np.sqrt(6)*np.array([-1,-1,2])*0.5, 6)
 
-    DoubleStainBatch = DualLabelingBatch(
+    DoubleStainBatch = DualLabelingBatchErlang(
         t_0=0,
-        x_0=np.array([0]*12),
-        extras=[jobs] # Jobs
+        x_0=np.array([0]*12*n_steps),
+        extras=[jobs, n_steps]
     )
     repeat_ensembles = [100]
-    params = param_sweep_k_predefined(k_points, edu_time, brdu_time, wait_time, period, n, repeat_ensembles)
+    # params = param_sweep_k_predefined(k_points, edu_time, brdu_time, wait_time, period, n, repeat_ensembles)
     if lookup_path[-4:] == '.csv':
         DoubleStainBatch.lookup_df = pd.read_csv(lookup_path)
     elif lookup_path[-5:] == '.json':
         DoubleStainBatch.lookup_df = pd.read_json(lookup_path)
     else:
         raise ValueError('Format of lookup table not understood. Please use CSV or JSON.')
+    params = [df_row.to_dict() for _, df_row in pd.read_json('data/DL bootstrap 2025-12-20 erlang 4 redo.json')[['k1', 'k2', 'k3', 'BrdU time', 'Wait time']].iterrows()]
+    for idx in range(len(params)):
+        params[idx].update({
+            "edu_t": 0.0,
+            "brdu_t": params[idx]['BrdU time'],
+            "wait_t": params[idx]['Wait time'],
+            "cycle_period": 24.0,
+            "n": 300,
+            "repeat_ensembles": repeat_ensembles[0]
+        })
+    params = np.random.choice(params, len(params), replace=False)
     DoubleStainBatch.run_bootstrap(
         bootstrap_parameters = params,
         repeats = 3,
@@ -881,9 +990,9 @@ def run_bootstrap_erlang(lookup_path, jobs=1, noisy_initial=False):
         noisy_initial = noisy_initial
     )
     try:
-        DoubleStainBatch.summary_data.to_json(f"data/DL bootstrap {datetime.today().date()} {int(os.environ['PBS_ARRAY_INDEX'])}.json")
+        DoubleStainBatch.summary_data.to_json(f"data/DL bootstrap {datetime.today().date()} {int(os.environ['PBS_ARRAY_INDEX'])} erlang {n_steps} redo.json")
     except:
-        DoubleStainBatch.summary_data.to_json(f"data/DL bootstrap {datetime.today().date()}.json")
+        DoubleStainBatch.summary_data.to_json(f"data/DL bootstrap {datetime.today().date()} erlang {n_steps} redo.json")
     # Saving these in json to preserve np array and not lose all readability & keep library version generality
 
 
@@ -891,6 +1000,8 @@ if __name__ == '__main__':
     # print('Current working directory:', os.getcwd())
     # make_lookup(noisy_initial=True, cov_file='data/DL analytic cov noisy.json') # Makes a new look-up table from noisy initial conditions
     # run_bootstrap('data/DL lookup 2025-12-16 noisy initial.json', noisy_initial=True, cov_file='DL analytic cov noisy.json')
-    make_lookup_erlang(n_steps=10, noisy_initial=False)
-    # run_bootstrap_erlang('data/DL analytic cov.json', n_steps=10, noisy_initial=False)
+    # make_lookup_erlang(n_steps=4, noisy_initial=False)
+    # df = pd.read_json('data/DL bootstrap 2025-12-20 erlang 4.json')
+    # df = df.loc[np.logical_or(np.logical_or(df['SNR k1']>100.0, df['SNR k2']>100.0), np.logical_or(df['SNR k1'].isna(), df['SNR k2'].isna()))]
+    run_bootstrap_erlang('data/DL analytic cov erlang 4.json', n_steps=4, noisy_initial=False)
     print('Done!')

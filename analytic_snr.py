@@ -3,7 +3,6 @@ import pandas as pd
 from scipy.integrate import solve_ivp
 gates = ['EdU+BrdU-', 'EdU-BrdU+', 'EdU+BrdU+', 'EdU-BrdU-']
 
-
 def build_base_matrices():
     n = 3
     S_base = np.array([[-1,  0, +2],
@@ -144,6 +143,7 @@ def integrate_piecewise_with_labels(k, mu0, Sigma0, t0, t_label1, t_label2, t_en
     counts_cov = M_obs @ Sigma_final @ M_obs.T
     return counts_mean, counts_cov, {'mu_final': mu_final, 'Sigma_final': Sigma_final, 'M_obs': M_obs}
 
+
 def compute_snr_from_modelfunc(model_func, theta, R=5, rel_step=1e-6, eps=1e-9, reg=1e-12, param_names=None):
     theta = np.asarray(theta, dtype=float)
     p = theta.size
@@ -256,6 +256,7 @@ def sweep():
         df_new.at[i, 'Covariance matrix'] = counts_cov
 
     df_new.to_json('data/DL analytic cov.json')
+
 
 def noisy_sweep():
     # --------------------------
