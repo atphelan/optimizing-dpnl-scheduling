@@ -428,6 +428,102 @@ def plotly_scatter(df, x, y, c, colourscheme='Viridis', trendline=False):
 	return fig
 
 #%%
+def demo_plot(df, x, y, c, lookup_df, colourscheme='Viridis'):
+	'''
+	Plot scatterpoints on a graph for x and y, color points by c and show how close they are to the ground truth
+	'''
+	pass
+	layout = go.Layout(plot_bgcolor='white')
+	fig = go.Figure(data=go.Scatter(x=df[x], y=df[y], mode='markers',
+		marker=dict(
+			size=6,
+			line=dict(width=0.5, color='darkblue'),
+			color=df[c],
+			colorscale=colourscheme,
+			showscale=True,
+			colorbar={'title':c, 'nticks': 5, 'thickness': 14}
+    	),
+		name='Simulated data',
+	), layout=layout)
+
+	groundtruth_df = lookup_df.loc[np.logical_and(lookup_df['BrdU time'].isin(df['BrdU time'].unique()), np.logical_and(
+		np.isclose(lookup_df['k1'], df['k1'].mean(), atol=1E-7), np.isclose(lookup_df['k2'], df['k2'].mean(), atol=1E-7)))].copy()
+	neighbourhood_df = lookup_df.loc[np.logical_and(lookup_df['BrdU time'].isin(df['BrdU time'].unique()), np.logical_and(
+		np.isclose(lookup_df['k1'], df['k1'].mean(), rtol=1E-1), np.isclose(lookup_df['k2'], df['k2'].mean(), rtol=10)))].copy()
+
+	fig.add_traces(data=[go.Scatter(x=groundtruth_df[x], y=groundtruth_df[y], mode='markers',
+		marker=dict(
+			size=12,
+			line=dict(width=0.5, color='darkblue'),
+			color=groundtruth_df['BrdU time'],
+			symbol='x',
+			showscale=False,
+			colorscale='Greys',
+			# colorbar={'title':'BrdU time', 'nticks': 2, 'thickness': 10,}
+    	),
+		name='True mean'),
+		go.Scatter(x=neighbourhood_df[x], y=neighbourhood_df[y], mode='markers',
+		marker=dict(
+			size=2,
+			color='black',
+			symbol='circle-dot',
+    	),
+		name='Nearby true means'
+	)])
+
+	fig.update_layout(
+		xaxis=dict(ticks='', showgrid=False, zeroline=False, nticks=12),
+		yaxis=dict(ticks='', showgrid=False, zeroline=False, nticks=12),
+		xaxis_title=dict(text=label_lookup.get(None, None), font=dict(size=24)),
+		yaxis_title=dict(text=label_lookup.get(y, None), font=dict(size=24)),
+		autosize=False,
+		height=400,
+		width=500,
+		margin=dict(l=0, r=0, t=0, b=0),
+		hovermode='closest',
+		font=dict(size=18),
+		boxmode='group',
+		legend=dict(
+			yanchor="bottom",
+			y=0.05,
+			xanchor="right",
+			x=0.95,
+			bordercolor='dimgrey',
+			borderwidth=2,
+		),
+	)
+	fig.update_xaxes(
+		zeroline=True,
+		zerolinewidth=2,
+		zerolinecolor='black',
+		showgrid=True,
+		gridwidth=1,
+		gridcolor='gray',
+		linewidth=1.5,
+		linecolor='black',
+		mirror=True,
+		nticks=10,
+		# range=[0.0, 12.01],
+		# dtick=20,
+	)
+	fig.update_yaxes(
+		zeroline=True,
+		zerolinewidth=2,
+		zerolinecolor='black',
+		showgrid=True,
+		gridwidth=1,
+		gridcolor='gray',
+		nticks=10,
+		linewidth=1.5,
+		linecolor='black',
+		mirror=True,
+		# dtick=1,
+		# range=[40.0, 100.0],
+	)
+	return fig
+
+
+#%%
 def plotly_bar(categories: List[str], heights: List[float], colours: List[str]):
 	layout = go.Layout(plot_bgcolor='white')
 	fig = go.Figure(data=[go.Bar(
@@ -506,19 +602,19 @@ df['Total cells at end'] = df['Mean EdU+BrdU+']+df['Mean EdU-BrdU+']+df['Mean Ed
 df['Labelled fraction'] = 1 - df['Mean EdU-BrdU-']/df['Total cells at end']
 
 #%%
-df_preprint = pd.read_json('DL bootstrap 11:07:2024-big concatted.json') # Can take a while for larger datasets
-print('k1 values: ', df_preprint['k1'].unique(), ';', len(df_preprint['k1'].unique()), 'unique values of k1.')
-print('k2 values: ', df_preprint['k2'].unique(), ';', len(df_preprint['k2'].unique()), 'unique values of k2.')
-df_preprint['tg1'] = 1/df_preprint['k1']
-df_preprint['ts'] = 1/df_preprint['k2']
-df_preprint['tg2m'] = 1/df_preprint['k3']
-df_preprint['x'] = df_preprint['Initial G1']/(df_preprint['Initial G1']+df_preprint['Initial S']+df_preprint['Initial G2M'])
-df_preprint['y'] = df_preprint['Initial S']/(df_preprint['Initial G1']+df_preprint['Initial S']+df_preprint['Initial G2M'])
-df_preprint['z'] = df_preprint['Initial G2M']/(df_preprint['Initial G1']+df_preprint['Initial S']+df_preprint['Initial G2M'])
+preprint_df = pd.read_json('DL bootstrap 11:07:2024-big concatted.json') # Can take a while for larger datasets
+print('k1 values: ', preprint_df['k1'].unique(), ';', len(preprint_df['k1'].unique()), 'unique values of k1.')
+print('k2 values: ', preprint_df['k2'].unique(), ';', len(preprint_df['k2'].unique()), 'unique values of k2.')
+preprint_df['tg1'] = 1/preprint_df['k1']
+preprint_df['ts'] = 1/preprint_df['k2']
+preprint_df['tg2m'] = 1/preprint_df['k3']
+preprint_df['x'] = preprint_df['Initial G1']/(preprint_df['Initial G1']+preprint_df['Initial S']+preprint_df['Initial G2M'])
+preprint_df['y'] = preprint_df['Initial S']/(preprint_df['Initial G1']+preprint_df['Initial S']+preprint_df['Initial G2M'])
+preprint_df['z'] = preprint_df['Initial G2M']/(preprint_df['Initial G1']+preprint_df['Initial S']+preprint_df['Initial G2M'])
 for k in ['k1', 'k2']:
-	df_preprint[f'Relative error {k}'] = (df_preprint[k] - df_preprint[f'Mean inferred {k}'])/df_preprint[f'Std inferred {k}']
-df_preprint['Total cells at end'] = df_preprint['Mean EdU+BrdU+']+df_preprint['Mean EdU-BrdU+']+df_preprint['Mean EdU+BrdU-']+df_preprint['Mean EdU-BrdU-']
-df_preprint['Labelled fraction'] = 1 - df_preprint['Mean EdU-BrdU-']/df_preprint['Total cells at end']
+	preprint_df[f'Relative error {k}'] = (preprint_df[k] - preprint_df[f'Mean inferred {k}'])/preprint_df[f'Std inferred {k}']
+preprint_df['Total cells at end'] = preprint_df['Mean EdU+BrdU+']+preprint_df['Mean EdU-BrdU+']+preprint_df['Mean EdU+BrdU-']+preprint_df['Mean EdU-BrdU-']
+preprint_df['Labelled fraction'] = 1 - preprint_df['Mean EdU-BrdU-']/preprint_df['Total cells at end']
 
 '''
 PLOTTING BELOW

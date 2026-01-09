@@ -1,2 +1,4 @@
 data
 *.pyc
+*.pbs
+.DS_store
