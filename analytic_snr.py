@@ -1,7 +1,12 @@
+#%%
 import numpy as np
 import pandas as pd
 from scipy.integrate import solve_ivp
 gates = ['EdU+BrdU-', 'EdU-BrdU+', 'EdU+BrdU+', 'EdU-BrdU-']
+
+from gECC import hex_param_mesh
+from itertools import product as iprod
+from gECC import generate_steady_state
 
 def build_base_matrices():
     n = 3
@@ -18,7 +23,7 @@ def build_A_from_rates(k):
     for r in range(Rn):
         col = S_base[:, r]
         src = sources[r]
-        A[:, src] += col * k.iloc[r]
+        A[:, src] += col * k[r]
     return A
 
 def expand_to_labels(S_base, sources_base, n_labels):
@@ -214,35 +219,135 @@ def get_noisy_initial(k, mu0, Sigma0, n_end):
     return mu_f, Sigma_f
 
 
-
-def demo():
+#%%
+def demo(t2 = 4.0):
     # --------------------------
     # Demo run
     # --------------------------
     k = np.array([0.087656, 0.103810, 0.337980])
     mu0 = np.array([165.0, 106.0, 30.0])
     Sigma0 = np.diag(mu0) * 0.0
-    t0 = 0.0; t_label1 = 0.0; t_label2 = 4.0; t_end = 4.5
+    t0 = 0.0; t_label1 = 0.0; t_label2 = t2; t_end = t2 + 0.5
 
     counts_mean, counts_cov, meta = integrate_piecewise_with_labels(k, mu0, Sigma0, t0, t_label1, t_label2, t_end)
-    print("Observed counts mean (EdU-only, BrdU-only, Double, Negative):", counts_mean)
-    print("Observed counts covariance matrix:\n", counts_cov)
+    # print("Observed counts mean (EdU-only, BrdU-only, Double, Negative):", counts_mean)
+    # print("Observed counts covariance matrix:\n", counts_cov)
 
     def model_func_for_snr(theta_vec):
         m, cov, _ = integrate_piecewise_with_labels(theta_vec, mu0, Sigma0, t0, t_label1, t_label2, t_end)
         return m, cov
 
     df_snr, diag = compute_snr_from_modelfunc(model_func_for_snr, k, R=5)
-    print("\nSNR results:\n", df_snr)
+    print(f"\nSNR results for t_wait = {t2}:\n", df_snr['SNR'])
 
-    counts_mean, counts_cov, df_snr, diag
+    # counts_mean, counts_cov, df_snr, diag
 
-def sweep():
+def demo_snr_vs_t2(
+    t2_values=np.linspace(1.0, 8.0, 9),
+    n_rate_sets=14,
+    total_cycle_time=24.0,
+    R=5,
+    seed=0,
+):
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    rng = np.random.default_rng(seed)
+
+    # -------------------------
+    # Generate rate sets
+    # -------------------------
+    taus = rng.lognormal(
+        mean=np.log(total_cycle_time / 3),
+        sigma=0.5,
+        size=(n_rate_sets, 3),
+    )
+    taus *= total_cycle_time / taus.sum(axis=1, keepdims=True)
+    # K = 1.0 / taus
+    K = hex_param_mesh(np.array([11,8,5]), 1/np.sqrt(6)*np.array([2,-1,-1]), 1/np.sqrt(6)*np.array([-1,-1,2])*0.5, 6)
+
+    # storage: [parameter, scenario, t2]
+    snr = np.zeros((3, len(K), len(t2_values)))
+    save_data = pd.DataFrame([], columns=['k1', 'k2', 'k3', 't2', 'SNR k1', 'SNR k2', 'SNR k3'])
+
+    # -------------------------
+    # Loop over scenarios
+    # -------------------------
+    for i, k in enumerate(K):
+
+        # steady exponential-growth composition
+        mu0 = generate_steady_state(k[1]/k[0], k[2]/k[0], n=300)
+        Sigma0 = np.zeros((3, 3))
+
+        for j, t2 in enumerate(t2_values):
+
+            t0 = 0.0
+            t_label1 = 0.0
+            t_label2 = t2
+            t_end = t2 + 0.5
+
+            def model_func(theta):
+                m, cov, _ = integrate_piecewise_with_labels(
+                    theta,
+                    mu0,
+                    Sigma0,
+                    t0,
+                    t_label1,
+                    t_label2,
+                    t_end,
+                )
+                return m, cov
+
+            df_snr, _ = compute_snr_from_modelfunc(
+                model_func,
+                k,
+                R=R,
+            )
+
+            snr[:, i, j] = df_snr["SNR"].values
+            save_data = pd.concat([save_data, pd.DataFrame([{'k1':k[0], 'k2': k[1], 'k3': k[2], 't2': j, 'SNR k1': snr[0,i,j], 'SNR k2': snr[1,i,j], 'SNR k3': snr[2,i,j]}])], axis=0)
+
+    save_data.reset_index(drop=True).to_csv(f'Fisher SNR summary {len(K)}.csv')
+    # -------------------------
+    # Plotting
+    # -------------------------
+    param_names = [r"$k_1$", r"$k_2$", r"$k_3$"]
+
+    for p in range(3):
+
+        plt.figure()
+
+        # bin by true parameter value
+        bins = np.digitize(
+            K[:, p],
+            np.quantile(K[:, p], np.linspace(0, 1, 8))[1:-1],
+        )
+
+        for b in range(7):
+            idx = np.where(bins == b)[0]
+            if len(idx) == 0:
+                continue
+            mean_snr = snr[p, idx, :].mean(axis=0)
+            plt.plot(t2_values, mean_snr)
+
+        plt.xlabel(r"$t_2$ (hours)")
+        plt.ylabel("SNR")
+        plt.title(f"SNR vs $t_2$ for {param_names[p]}")
+        plt.tight_layout()
+        plt.show()
+
+
+def sweep(template_df: pd.DataFrame = None):
     # --------------------------
     # Sweep run
     # --------------------------
-    df_gill = pd.read_json('DL bootstrap 11:07:2024-big concatted.json')
-    df_new = df_gill[['k1', 'k2', 'k3', 'BrdU time', 'Initial G1', 'Initial S', 'Initial G2M']].copy()
+    if template_df is None:
+        df_gill = pd.read_json('DL bootstrap 11:07:2024-big concatted.json')
+        df_new = df_gill[['k1', 'k2', 'k3', 'BrdU time', 'Initial G1', 'Initial S', 'Initial G2M']].copy()
+        fname = 'data/DL analytic cov.json'
+    else:
+        df_new = template_df[['k1', 'k2', 'k3', 'BrdU time', 'Initial G1', 'Initial S', 'Initial G2M']].copy()
+        fname = 'data/DL analytic cov templated.json'
     df_new['Covariance matrix'] = None
     for i, df_row in df_new.iterrows():
         k = df_row[['k1', 'k2', 'k3']]
@@ -255,7 +360,8 @@ def sweep():
             df_new.at[i, f'Std {gate}'] = np.sqrt(counts_cov[j, j])
         df_new.at[i, 'Covariance matrix'] = counts_cov
 
-    df_new.to_json('data/DL analytic cov.json')
+    df_new['Cycle period'] = 1/df_new['k1'] + 1/df_new['k2'] + 1/df_new['k3']
+    df_new.to_json(fname)
 
 
 def noisy_sweep():
@@ -281,6 +387,21 @@ def noisy_sweep():
 
     df_new.to_json('data/DL analytic cov noisy.json')
 
+#%%
 if __name__ == '__main__':
     # sweep()
-    noisy_sweep()
+    # noisy_sweep()
+
+    g1_list = np.linspace(7,17,20)
+    s_list = np.linspace(6,12,16)
+    g2m_list = np.linspace(2,6,8)
+    brdu_list = np.arange(1,13,2)
+    phase_times = [pts for pts in iprod(g1_list, s_list, g2m_list) if np.isclose(sum(pts), 24.0, atol=2.0)]
+    params = [{'k1': 1/ps[0], 'k2': 1/ps[1], 'k3': 1/ps[2]} for ps in phase_times]
+    
+    template_df = pd.DataFrame(params)
+    template_df['BrdU time'] = [brdu_list]*len(template_df)
+    template_df[['Initial G1', 'Initial S', 'Initial G2M']] = 0
+    template_df[['Initial G1', 'Initial S', 'Initial G2M']] = template_df.apply(lambda row: generate_steady_state(row['k2']/row['k1'], row['k3']/row['k1'], 300).astype(int), axis='columns', result_type='expand')
+    template_df = template_df.explode('BrdU time').reset_index(drop=True)
+    sweep(template_df)

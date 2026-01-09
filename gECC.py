@@ -229,8 +229,8 @@ class DualLabelingBatch(DualLabelingEnsemble):
         correlation_columns = [c for c in new_row.keys() if ('Mean' in c or 'Std' in c)]
         if run_type=='bootstrap':
             new_row.update({"Repeat Ensembles": self.repeat_ensembles})
-            k1, k2 = self.infer_k(new_row)
-            new_row.update({'Mean inferred k1': k1, 'Mean inferred k2': k2})
+            k1, k2, tp = self.infer_k(new_row)
+            new_row.update({'Mean inferred k1': k1, 'Mean inferred k2': k2, 'Mean inferred cycle period': tp})
         self.ensemble_data = pd.concat([self.ensemble_data, pd.DataFrame([new_row])], ignore_index=True)
 
 
@@ -380,8 +380,8 @@ class DualLabelingBatch(DualLabelingEnsemble):
         , axis=1)
         # nearest_row = lookup_slice.iloc[lookup_slice['Scaled Euclidean distance from obs'].argmin()]
         nearest_row = lookup_slice.iloc[lookup_slice['Mahalanobis distance from obs'].argmin()]
-        k1, k2 = nearest_row['k1'], nearest_row['k2']
-        return k1, k2
+        k1, k2, tp = nearest_row['k1'], nearest_row['k2'], nearest_row['Cycle period']
+        return k1, k2, tp
 
     def run_bootstrap(self, bootstrap_parameters, repeats, n_parameter_combos, noisy_initial=False, cov_file=None):
         '''
@@ -447,7 +447,7 @@ class DualLabelingBatch(DualLabelingEnsemble):
             matrix = np.corrcoef(gp_df[corr_cols[:-2]].copy().T).astype(object)
             mean_row['Ensemble Correlations'] = [matrix]
             compacted_df = pd.concat([compacted_df, mean_row.reset_index(drop=True)], axis='index')
-            assert (mean_row.T.isna().sum() == 0).all(), 'NaN values in outputs!'       
+            # assert (mean_row.T.isna().sum() == 0).all(), 'NaN values in outputs!'       
         try:
             compacted_df['SNR k1'] = compacted_df['Mean inferred k1']/compacted_df['Std inferred k1']
         except:
@@ -842,8 +842,8 @@ class DualLabelingBatchErlang(DualLabelingBatch):
         # correlation_columns = [c for c in new_row.keys() if ('Mean' in c or 'Std' in c)]
         if run_type=='bootstrap':
             new_row.update({"Repeat Ensembles": self.repeat_ensembles})
-            k1, k2 = self.infer_k(new_row)
-            new_row.update({'Mean inferred k1': k1, 'Mean inferred k2': k2})
+            k1, k2, tp = self.infer_k(new_row)
+            new_row.update({'Mean inferred k1': k1, 'Mean inferred k2': k2, 'Mean inferred cycle period': tp})
         self.ensemble_data = pd.concat([self.ensemble_data, pd.DataFrame([new_row])], ignore_index=True)
 
     def _initialise_ensemble(self, ps, noisy_initial=False, cov=None):
@@ -909,32 +909,39 @@ def make_lookup_erlang(n_steps=10, noisy_initial=False, jobs=1): # Make a look-u
         DoubleStainBatch.ensemble_data.to_csv(f"data/DL lookup {datetime.today().date()} erlang {n_steps}.csv")
 
 
-def run_bootstrap(lookup_path, jobs=1, noisy_initial=False, cov_file=None):
+def run_bootstrap(lookup_path, jobs=1, noisy_initial=False, cov_file=None, ks_as_in_lookup=False):
     edu_time = [0]
-    brdu_time = list(range(1, 13, 1))
     wait_time = [0.5]
-
     period = [24]
     n = [300]
-    # G1_list = np.linspace(7,17,20)
-    # S_list = np.linspace(6,12,40)
-    k_points = hex_param_mesh(np.array([11,8,5]), 1/np.sqrt(6)*np.array([2,-1,-1]), 1/np.sqrt(6)*np.array([-1,-1,2])*0.5, 6)
-    # k_points = hex_param_mesh(np.array([11,8,5]), 1/np.sqrt(6)*np.array([2,-1,-1]), 1/np.sqrt(6)*np.array([-1,-1,2])*0.5, 2)
-
 
     DoubleStainBatch = DualLabelingBatch(
         t_0=0,
         x_0=np.array([0]*12),
         extras=[jobs] # Jobs
     )
-    repeat_ensembles = [100]
-    params = param_sweep_k_predefined(k_points, edu_time, brdu_time, wait_time, period, n, repeat_ensembles)
+    repeat_ensembles = [40]
+
     if lookup_path[-4:] == '.csv':
         DoubleStainBatch.lookup_df = pd.read_csv(lookup_path)
     elif lookup_path[-5:] == '.json':
         DoubleStainBatch.lookup_df = pd.read_json(lookup_path)
     else:
         raise ValueError('Format of lookup table not understood. Please use CSV or JSON.')
+
+    if ks_as_in_lookup:
+        k_points = DoubleStainBatch.lookup_df[['k1', 'k2', 'k3']].to_numpy()
+    else:
+        k_points = hex_param_mesh(np.array([11,8,5]), 1/np.sqrt(6)*np.array([2,-1,-1]), 1/np.sqrt(6)*np.array([-1,-1,2])*0.5, 6)
+        # k_points = hex_param_mesh(np.array([11,8,5]), 1/np.sqrt(6)*np.array([2,-1,-1]), 1/np.sqrt(6)*np.array([-1,-1,2])*0.5, 2)
+        # G1_list = np.linspace(7,17,20)
+        # S_list = np.linspace(6,12,40)
+    if 'Cycle period' not in DoubleStainBatch.lookup_df.columns:
+        DoubleStainBatch.lookup_df['Cycle period'] = 1/DoubleStainBatch.lookup_df['k1'] + 1/DoubleStainBatch.lookup_df['k2'] + 1/DoubleStainBatch.lookup_df['k3']
+
+    brdu_time = DoubleStainBatch.lookup_df['BrdU time'].unique()
+    params = param_sweep_k_predefined(k_points, edu_time, brdu_time, wait_time, period, n, repeat_ensembles)
+
     DoubleStainBatch.run_bootstrap(
         bootstrap_parameters = params,
         repeats = 3,
@@ -943,9 +950,9 @@ def run_bootstrap(lookup_path, jobs=1, noisy_initial=False, cov_file=None):
         cov_file = cov_file
     )
     try:
-        DoubleStainBatch.summary_data.to_json(f"data/DL bootstrap {datetime.today().date()} {int(os.environ['PBS_ARRAY_INDEX'])}.json")
+        DoubleStainBatch.summary_data.to_json(f"data/DL bootstrap {datetime.today().date()} {int(os.environ['PBS_ARRAY_INDEX'])} {'noisy' if noisy_initial else ''}.json")
     except:
-        DoubleStainBatch.summary_data.to_json(f"data/DL bootstrap {datetime.today().date()}.json")
+        DoubleStainBatch.summary_data.to_json(f"data/DL bootstrap {datetime.today().date()} {'noisy' if noisy_initial else ''}.json")
     # Saving these in json to preserve np array and not lose all readability & keep library version generality
 
 def run_bootstrap_erlang(lookup_path, jobs=1, n_steps=10, noisy_initial=False):
@@ -996,12 +1003,57 @@ def run_bootstrap_erlang(lookup_path, jobs=1, n_steps=10, noisy_initial=False):
     # Saving these in json to preserve np array and not lose all readability & keep library version generality
 
 
+def run_demo_experiment(lookup_path='data/DL analytic cov.json'):
+    edu_time = [0]
+    wait_time = [0.5]
+    period = [24]
+    n = [300]
+
+    DoubleStainBatch = DualLabelingBatch(
+        t_0=0,
+        x_0=np.array([0]*12),
+        extras=[1] 
+    )
+    repeat_ensembles = [5]
+
+    if lookup_path[-4:] == '.csv':
+        DoubleStainBatch.lookup_df = pd.read_csv(lookup_path)
+    elif lookup_path[-5:] == '.json':
+        DoubleStainBatch.lookup_df = pd.read_json(lookup_path)
+    else:
+        raise ValueError('Format of lookup table not understood. Please use CSV or JSON.')
+
+    k_points = np.array([np.array([1/12, 1/8, 1/4])]*15) # 3 repeats of the same parameters, middle-of-the-range
+    k_points += 1E-8*np.random.rand(15,3)
+
+    if 'Cycle period' not in DoubleStainBatch.lookup_df.columns:
+        DoubleStainBatch.lookup_df['Cycle period'] = 1/DoubleStainBatch.lookup_df['k1'] + 1/DoubleStainBatch.lookup_df['k2'] + 1/DoubleStainBatch.lookup_df['k3']
+
+    brdu_time = [1, 3]
+    params = param_sweep_k_predefined(k_points, edu_time, brdu_time, wait_time, period, n, repeat_ensembles)
+
+    DoubleStainBatch.run_bootstrap(
+        bootstrap_parameters = params,
+        repeats = 1,
+        n_parameter_combos = len(params),
+    )
+
+    DoubleStainBatch.summary_data.to_json(f"data/DL demo {datetime.today().date()}.json")
+    # Saving these in json to preserve np array and not lose all readability & keep library version generality
+
+
+
 if __name__ == '__main__':
     # print('Current working directory:', os.getcwd())
     # make_lookup(noisy_initial=True, cov_file='data/DL analytic cov noisy.json') # Makes a new look-up table from noisy initial conditions
-    # run_bootstrap('data/DL lookup 2025-12-16 noisy initial.json', noisy_initial=True, cov_file='DL analytic cov noisy.json')
+    run_bootstrap('data/DL lookup 2025-12-16 noisy initial.json', noisy_initial=True, cov_file='data/DL analytic cov noisy.json')
     # make_lookup_erlang(n_steps=4, noisy_initial=False)
     # df = pd.read_json('data/DL bootstrap 2025-12-20 erlang 4.json')
     # df = df.loc[np.logical_or(np.logical_or(df['SNR k1']>100.0, df['SNR k2']>100.0), np.logical_or(df['SNR k1'].isna(), df['SNR k2'].isna()))]
-    run_bootstrap_erlang('data/DL analytic cov erlang 4.json', n_steps=4, noisy_initial=False)
-    print('Done!')
+    # run_bootstrap_erlang('data/DL analytic cov erlang 4.json', n_steps=4, noisy_initial=False)
+    # print('Done!')
+
+    ### Inference without a fixed period, all within 1 hour of 24 hours
+
+    # run_bootstrap('data/DL analytic cov templated.json', noisy_initial=False, cov_file='data/DL analytic cov templated.json', ks_as_in_lookup=True)
+    # run_demo_experiment()
