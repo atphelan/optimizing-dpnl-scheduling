@@ -11,7 +11,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/compute")
-def compute(a: float, b: float, c: float, d: float):
-    result = find_s_optimum_from_counts(a, b, c, d)
+@app.get("/optimize/counts")
+def optimize_counts(dt: int, edu: float, dp: float, brdu: float):
+    result = find_s_optimum_from_counts(dt, edu, dp, brdu)
+    return {"result": result}
+
+@app.get("/optimize/phases")
+def optimize_phases(tg1: float, ts: float, tp: float):
+    result = find_s_optimum_from_phases(tg1, ts, tp)
     return {"result": result}
