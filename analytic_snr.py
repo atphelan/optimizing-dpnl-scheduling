@@ -390,7 +390,8 @@ def noisy_sweep():
 #%%
 if __name__ == '__main__':
     # sweep()
-    # noisy_sweep()
+    noisy_sweep()
+    exit()
 
     g1_list = np.linspace(7,17,20)
     s_list = np.linspace(6,12,16)

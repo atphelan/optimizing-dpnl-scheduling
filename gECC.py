@@ -26,7 +26,7 @@ class DualLabelingEnsemble(ReactionEnsemble):
         if noisy_initial:
             # self.run_until_n_for_initial(ps['n']) # Sets self.x inside
             # self.x[0:3] += np.multiply(np.random.randn(3), np.sqrt(self.x[0:3])).round().astype(int)
-            fluctuation = np.random.multivariate_normal([0.0, 0.0, 0.0], cov)/10
+            fluctuation = np.random.multivariate_normal([0.0, 0.0, 0.0], cov)*self.alpha
             self.x = self.x_0 + np.pad(fluctuation, (0, 9), 'constant').round().astype(int)
             assert (self.x >= 0).all(), 'Negative terms in initial state! Reduce noise contribution.'
             self.t = t_0
@@ -265,7 +265,7 @@ class DualLabelingBatch(DualLabelingEnsemble):
         if noisy_initial:
             # self.run_until_n_for_initial(ps['n']) # Sets self.x inside
             # self.x[0:3] += np.multiply(np.random.randn(3), np.sqrt(self.x[0:3])).round().astype(int)
-            self.x[0:3] += np.random.multivariate_normal([0.0, 0.0, 0.0], cov)/10
+            self.x[0:3] += np.random.multivariate_normal([0.0, 0.0, 0.0], cov)*self.alpha
             assert (self.x >= 0).all(), 'Negative terms in initial state! Reduce noise contribution.'
         self.x = self.x.round().astype(int)
         self.x_0 = self.x_0.round().astype(int)
@@ -276,7 +276,7 @@ class DualLabelingBatch(DualLabelingEnsemble):
         if noisy_initial:
             # self.run_until_n_for_initial(ps['n']) # Sets self.x inside
             # self.x[0:3] += np.multiply(np.random.randn(3), np.sqrt(self.x[0:3])).round().astype(int)
-            fluctuation = np.random.multivariate_normal([0.0, 0.0, 0.0], cov)/10
+            fluctuation = np.random.multivariate_normal([0.0, 0.0, 0.0], cov)*self.alpha
             self.x = self.x_0 + np.pad(fluctuation, (0, 9), 'constant').round().astype(int)
             assert (self.x >= 0).all(), 'Negative terms in initial state! Reduce noise contribution.'
             self.t = t_0
@@ -375,11 +375,11 @@ class DualLabelingBatch(DualLabelingEnsemble):
         # Mahalanobis distance instead of Euclidean
         # Need to redefine the look-up to include covariance instead of just std. Do it analytically.
         new_row_means = np.array([new_row[gate] for gate in gates])
-        lookup_slice['Mahalanobis distance from obs'] = lookup_slice.apply(lambda lookup_row:
-                    (new_row_means - lookup_row[gates]).T @ np.linalg.pinv(lookup_row['Covariance matrix']) @ (new_row_means - lookup_row[gates])
-        , axis=1)
-        # nearest_row = lookup_slice.iloc[lookup_slice['Scaled Euclidean distance from obs'].argmin()]
-        nearest_row = lookup_slice.iloc[lookup_slice['Mahalanobis distance from obs'].argmin()]
+        # lookup_slice['Mahalanobis distance from obs'] = lookup_slice.apply(lambda lookup_row:
+                    # (new_row_means - lookup_row[gates]).T @ np.linalg.pinv(lookup_row['Covariance matrix']) @ (new_row_means - lookup_row[gates])
+        # , axis=1)
+        nearest_row = lookup_slice.iloc[lookup_slice['Scaled Euclidean distance from obs'].argmin()]
+        # nearest_row = lookup_slice.iloc[lookup_slice['Mahalanobis distance from obs'].argmin()]
         k1, k2, tp = nearest_row['k1'], nearest_row['k2'], nearest_row['Cycle period']
         return k1, k2, tp
 
@@ -685,6 +685,8 @@ def make_lookup(jobs=1, noisy_initial=False, cov_file=None): # Make a look-up ta
         x_0=np.array([0]*12),
         extras=[jobs] # Jobs
     )
+    if noisy_initial:
+        DoubleStainBatch.alpha = 0.2
     params = param_sweep_k_predefined(k_points, edu_time, brdu_time, wait_time, period, n)
     DoubleStainBatch.run_batch(
         batch_parameters = params,
@@ -694,9 +696,9 @@ def make_lookup(jobs=1, noisy_initial=False, cov_file=None): # Make a look-up ta
         cov_file = cov_file
     )
     try: # If a pbs array index is found, this means the code is being run in parallel on the cluster and there will be multiple output files
-        DoubleStainBatch.ensemble_data.to_csv(f"data/DL lookup {datetime.today().date()} {int(os.environ['PBS_ARRAY_INDEX'])}.csv")
+        DoubleStainBatch.ensemble_data.to_csv(f"data/DL lookup {datetime.today().date()} {int(os.environ['PBS_ARRAY_INDEX'])} {f'noisy {DoubleStainBatch.alpha}'.replace('.', 'p') if noisy_initial else ''}.csv")
     except:
-        DoubleStainBatch.ensemble_data.to_csv(f"data/DL lookup {datetime.today().date()}.csv")
+        DoubleStainBatch.ensemble_data.to_csv(f"data/DL lookup {datetime.today().date()} {f'noisy {DoubleStainBatch.alpha}'.replace('.', 'p') if noisy_initial else ''}.csv")
 
 
 def erlang_stoichiometries_4labels(n_steps, k1, k2, k3,
@@ -861,7 +863,7 @@ class DualLabelingBatchErlang(DualLabelingBatch):
         if noisy_initial:
             # self.run_until_n_for_initial(ps['n']) # Sets self.x inside
             # self.x[0:3] += np.multiply(np.random.randn(3), np.sqrt(self.x[0:3])).round().astype(int)
-            self.x[0:3] += np.random.multivariate_normal([0.0, 0.0, 0.0], cov)/10
+            self.x[0:3] += np.random.multivariate_normal([0.0, 0.0, 0.0], cov)*self.alpha
             assert (self.x >= 0).all(), 'Negative terms in initial state! Reduce noise contribution.'
         self.x = self.x.round().astype(int)
         self.x_0 = self.x_0.round().astype(int)
@@ -894,8 +896,8 @@ def make_lookup_erlang(n_steps=10, noisy_initial=False, jobs=1): # Make a look-u
         x_0=np.array([0]*12*n_steps),
         extras=[jobs, n_steps]
     )
-    
-
+    if noisy_initial:
+        DoubleStainBatch.alpha = 0.5
     params = param_sweep_k_predefined(k_points, edu_time, brdu_time, wait_time, period, n)
     DoubleStainBatch.run_batch(
         batch_parameters = params,
@@ -920,7 +922,7 @@ def run_bootstrap(lookup_path, jobs=1, noisy_initial=False, cov_file=None, ks_as
         x_0=np.array([0]*12),
         extras=[jobs] # Jobs
     )
-    repeat_ensembles = [40]
+    repeat_ensembles = [1000]
 
     if lookup_path[-4:] == '.csv':
         DoubleStainBatch.lookup_df = pd.read_csv(lookup_path)
@@ -930,7 +932,17 @@ def run_bootstrap(lookup_path, jobs=1, noisy_initial=False, cov_file=None, ks_as
         raise ValueError('Format of lookup table not understood. Please use CSV or JSON.')
 
     if ks_as_in_lookup:
-        k_points = DoubleStainBatch.lookup_df[['k1', 'k2', 'k3']].to_numpy()
+        k_points = DoubleStainBatch.lookup_df[['k1', 'k2', 'k3']].copy()
+        # k_points = np.array([[0.0926279639977838, 0.12827295080492923, 0.18490275340413975],
+        #                     [0.09441308930039059,0.13172190533363753,0.17192479804406605]]) # For testing only a combo close to the mean k as representative
+        k_points = k_points[np.logical_and(np.isclose(k_points['k1'], k_points['k1'].mean(), rtol=5E-2), np.isclose(k_points['k2'], k_points['k2'].mean(), rtol=5E-2))].to_numpy()
+        k_points = np.array(
+            [np.array([0.09090909090909091, 0.125, 0.2]),
+             np.array([0.0892528489543347, 0.12188991564458218, 0.2177818103542495]),
+             np.array([0.08180129814735072, 0.125, 0.2648827604847485]),
+             np.array([0.1002066333545786, 0.12188991564458218, 0.17192479804406605]),
+            ]
+        )
     else:
         k_points = hex_param_mesh(np.array([11,8,5]), 1/np.sqrt(6)*np.array([2,-1,-1]), 1/np.sqrt(6)*np.array([-1,-1,2])*0.5, 6)
         # k_points = hex_param_mesh(np.array([11,8,5]), 1/np.sqrt(6)*np.array([2,-1,-1]), 1/np.sqrt(6)*np.array([-1,-1,2])*0.5, 2)
@@ -941,7 +953,8 @@ def run_bootstrap(lookup_path, jobs=1, noisy_initial=False, cov_file=None, ks_as
 
     brdu_time = DoubleStainBatch.lookup_df['BrdU time'].unique()
     params = param_sweep_k_predefined(k_points, edu_time, brdu_time, wait_time, period, n, repeat_ensembles)
-
+    if noisy_initial:
+        DoubleStainBatch.alpha = 0.2
     DoubleStainBatch.run_bootstrap(
         bootstrap_parameters = params,
         repeats = 3,
@@ -950,9 +963,9 @@ def run_bootstrap(lookup_path, jobs=1, noisy_initial=False, cov_file=None, ks_as
         cov_file = cov_file
     )
     try:
-        DoubleStainBatch.summary_data.to_json(f"data/DL bootstrap {datetime.today().date()} {int(os.environ['PBS_ARRAY_INDEX'])} {'noisy' if noisy_initial else ''}.json")
+        DoubleStainBatch.summary_data.to_json(f"data/DL bootstrap {datetime.today().date()} {int(os.environ['PBS_ARRAY_INDEX'])} {f'noisy {DoubleStainBatch.alpha}'.replace('.', 'p') if noisy_initial else ''}2.json")
     except:
-        DoubleStainBatch.summary_data.to_json(f"data/DL bootstrap {datetime.today().date()} {'noisy' if noisy_initial else ''}.json")
+        DoubleStainBatch.summary_data.to_json(f"data/DL bootstrap {datetime.today().date()} {f'noisy {DoubleStainBatch.alpha}'.replace('.', 'p') if noisy_initial else ''}2.json")
     # Saving these in json to preserve np array and not lose all readability & keep library version generality
 
 def run_bootstrap_erlang(lookup_path, jobs=1, n_steps=10, noisy_initial=False):
@@ -979,7 +992,11 @@ def run_bootstrap_erlang(lookup_path, jobs=1, n_steps=10, noisy_initial=False):
         DoubleStainBatch.lookup_df = pd.read_json(lookup_path)
     else:
         raise ValueError('Format of lookup table not understood. Please use CSV or JSON.')
-    params = [df_row.to_dict() for _, df_row in pd.read_json('data/DL bootstrap 2025-12-20 erlang 4 redo.json')[['k1', 'k2', 'k3', 'BrdU time', 'Wait time']].iterrows()]
+    if 'Wait time' not in DoubleStainBatch.lookup_df.columns:
+        DoubleStainBatch.lookup_df['Wait time'] = 0.5
+    if 'Cycle period' not in DoubleStainBatch.lookup_df.columns:
+        DoubleStainBatch.lookup_df['Cycle period'] = 24.0
+    params = [df_row.to_dict() for _, df_row in DoubleStainBatch.lookup_df[['k1', 'k2', 'k3', 'BrdU time', 'Wait time']].iterrows()]
     for idx in range(len(params)):
         params[idx].update({
             "edu_t": 0.0,
@@ -989,7 +1006,11 @@ def run_bootstrap_erlang(lookup_path, jobs=1, n_steps=10, noisy_initial=False):
             "n": 300,
             "repeat_ensembles": repeat_ensembles[0]
         })
+    params = [p for p in params if np.logical_and(np.isclose(p['k1'], DoubleStainBatch.lookup_df['k1'].mean(), rtol=5E-2), np.isclose(p['k2'], DoubleStainBatch.lookup_df['k2'].mean(), rtol=5E-2))]
+    print(len(params))
     params = np.random.choice(params, len(params), replace=False)
+    if noisy_initial:
+        DoubleStainBatch.alpha = 0.5
     DoubleStainBatch.run_bootstrap(
         bootstrap_parameters = params,
         repeats = 3,
@@ -1046,7 +1067,7 @@ def run_demo_experiment(lookup_path='data/DL analytic cov.json'):
 if __name__ == '__main__':
     # print('Current working directory:', os.getcwd())
     # make_lookup(noisy_initial=True, cov_file='data/DL analytic cov noisy.json') # Makes a new look-up table from noisy initial conditions
-    run_bootstrap('data/DL lookup 2025-12-16 noisy initial.json', noisy_initial=True, cov_file='data/DL analytic cov noisy.json')
+    run_bootstrap('data/DL lookup 2026-01-14 noisy 0p2.csv', noisy_initial=True, cov_file='data/DL analytic cov noisy.json', ks_as_in_lookup=True)
     # make_lookup_erlang(n_steps=4, noisy_initial=False)
     # df = pd.read_json('data/DL bootstrap 2025-12-20 erlang 4.json')
     # df = df.loc[np.logical_or(np.logical_or(df['SNR k1']>100.0, df['SNR k2']>100.0), np.logical_or(df['SNR k1'].isna(), df['SNR k2'].isna()))]

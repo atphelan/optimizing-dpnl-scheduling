@@ -254,6 +254,118 @@ def peak_splines(df, x, y, grouping, n_groups, colours='Blues', extremum='max'):
 	)
 	return fig
 
+#%%
+def peak_splines_three_datasets(
+    df_solid, # 3-stage cycle
+    df_dashed, # Erlang distributed cycle
+    df_dotted, # Noisy initial conditions
+    x,
+    y,
+    colours=('black', 'black', 'black'),
+):
+    """
+    Plot mean y(x) curves from three datasets using solid, dashed, and dotted lines.
+
+    Parameters
+    ----------
+    df_solid, df_dashed, df_dotted : pandas.DataFrame
+        DataFrames containing columns x and y
+    x : str
+        Column name for x-axis
+    y : str
+        Column name for y-axis
+    colours : tuple
+        Line colours for the three curves
+    """
+
+    layout = go.Layout(plot_bgcolor='white')
+    fig = go.Figure(layout=layout)
+
+    datasets = [
+        (df_solid, 'solid', colours[0], '3-stage cycle'),
+        (df_dashed, 'dash', colours[1], '12-stage cycle'),
+        (df_dotted, 'dot', colours[2], 'Noisy initial conditions'),
+    ]
+
+    for df, dash_style, colour, label in datasets:
+        mean_curve = df.groupby(x)[y].mean().reset_index()
+
+        fig.add_trace(
+            go.Scatter(
+                x=mean_curve[x],
+                y=mean_curve[y],
+                line_shape='spline',
+                name=label,
+                line=dict(
+                    color=colour,
+                    width=4.0,
+                    dash=dash_style
+                ),
+            )
+        )
+
+        # Mark peak
+        peak_row = mean_curve.loc[mean_curve[y].idxmax()]
+        fig.add_trace(
+            go.Scatter(
+                x=[peak_row[x]],
+                y=[peak_row[y]],
+                mode='markers',
+                marker=dict(
+                    symbol='star',
+                    size=12,
+                    color=colour,
+                    line=dict(width=1.5, color='black'),
+                ),
+                showlegend=False,
+            )
+        )
+
+    fig.update_layout(
+        autosize=False,
+        height=400,
+        width=600,
+        margin=dict(l=0, r=0, t=0, b=0),
+        hovermode='closest',
+        font=dict(size=20),
+        legend=dict(
+            yanchor="bottom",
+            y=0.05,
+            xanchor="right",
+            x=0.95,
+            bordercolor='dimgrey',
+            borderwidth=2,
+        ),
+    )
+
+    fig.update_xaxes(
+        zeroline=True,
+        zerolinewidth=3,
+        zerolinecolor='black',
+        showgrid=True,
+        gridwidth=2,
+        gridcolor='gray',
+        linewidth=1,
+        linecolor='black',
+        mirror=True,
+        dtick=1,
+    )
+
+    fig.update_yaxes(
+        zeroline=True,
+        zerolinewidth=3,
+        zerolinecolor='black',
+        showgrid=True,
+        gridwidth=2,
+        gridcolor='gray',
+        linewidth=1,
+        linecolor='black',
+        mirror=True,
+        nticks=8,
+    )
+
+    return fig
+
 # %%
 def opt_dt_vs_x(df, x, grouping, opt_indep, opt_score, colours='Blues', extra_grouping=[]):
 	sum_df = []
