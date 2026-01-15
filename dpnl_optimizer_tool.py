@@ -103,19 +103,21 @@ def readout(dt_opt, max_snr, dt=0):
     if dt == dt_opt:
         print('It looks like you already used the ideal timing!')
 
-### DEMO ###
-find_s_optimum_from_counts(dt=2, edu_sp=6.3, dp=23.0, brdu_sp=6.6, print_only=True) # Numbers as used in the publication Figure 1c, which are Leukemic Stem-Like cells in Bone marrow.
-# The tool recommends 4 hours, which would balance the DP and SP population sizes more.
-find_s_optimum_from_counts(dt=4, edu_sp=1, dp=1, brdu_sp=1, print_only=True) # Trial numbers
-# The tool recommends 2 hours, which would give fewer SP cells but more DP cells.
-# This suggests a nontrivial Signal-to-Noise Ratio optimization trade-off not previously considered by researchers.
+
+if __name__ == '__main__':
+    ### DEMO ###
+    find_s_optimum_from_counts(dt=2, edu_sp=6.3, dp=23.0, brdu_sp=6.6, print_only=True) # Numbers as used in the publication Figure 1c, which are Leukemic Stem-Like cells in Bone marrow.
+    # The tool recommends 4 hours, which would balance the DP and SP population sizes more.
+    find_s_optimum_from_counts(dt=4, edu_sp=1, dp=1, brdu_sp=1, print_only=True) # Trial numbers
+    # The tool recommends 2 hours, which would give fewer SP cells but more DP cells.
+    # This suggests a nontrivial Signal-to-Noise Ratio optimization trade-off not previously considered by researchers.
 
 
-find_s_optimum_from_counts(dt=2, edu_sp=3.22, dp=13.2, brdu_sp=4.75, print_only=True) # MPP cells from Akinduro et al., 2018.
-find_s_optimum_from_counts(dt=2, edu_sp=1.18, dp=1.40, brdu_sp=1.33, print_only=True) # ST-HSC cells from Akinduro et al., 2018.
-find_s_optimum_from_counts(dt=2, edu_sp=1.09, dp=6.10, brdu_sp=2.18, print_only=True) # HSC cells from Akinduro et al., 2018.
-# Note the large differences between EdU+BrdU- and EdU-BrdU+ cells - this implies many newly divided cells are differentiating or exiting the BM before harvest.
-# These large differences constitute an example when the optimization tool is not recommended for use.
+    find_s_optimum_from_counts(dt=2, edu_sp=3.22, dp=13.2, brdu_sp=4.75, print_only=True) # MPP cells from Akinduro et al., 2018.
+    find_s_optimum_from_counts(dt=2, edu_sp=1.18, dp=1.40, brdu_sp=1.33, print_only=True) # ST-HSC cells from Akinduro et al., 2018.
+    find_s_optimum_from_counts(dt=2, edu_sp=1.09, dp=6.10, brdu_sp=2.18, print_only=True) # HSC cells from Akinduro et al., 2018.
+    # Note the large differences between EdU+BrdU- and EdU-BrdU+ cells - this implies many newly divided cells are differentiating or exiting the BM before harvest.
+    # These large differences constitute an example when the optimization tool is not recommended for use.
 
-find_s_optimum_from_phases(tg1=4, ts=4.5, tp=8.5, print_only=True) # Mean numbers for all cells in bone marrow (Frindel, Generation cycle of mouse bone marrow, 1967)
-# The tool recommends 2 hours, which conveniently is the most commonly used timing for studies on mouse cells.
+    find_s_optimum_from_phases(tg1=4, ts=4.5, tp=8.5, print_only=True) # Mean numbers for all cells in bone marrow (Frindel, Generation cycle of mouse bone marrow, 1967)
+    # The tool recommends 2 hours, which conveniently is the most commonly used timing for studies on mouse cells.
