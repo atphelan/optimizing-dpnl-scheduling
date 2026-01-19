@@ -284,7 +284,7 @@ def peak_splines_three_datasets(
     datasets = [
         (df_solid, 'solid', colours[0], '3-stage cycle'),
         (df_dashed, 'dash', colours[1], '12-stage cycle'),
-        (df_dotted, 'dot', colours[2], 'Noisy initial conditions'),
+        (df_dotted, 'dot', colours[2], '3-stage + variable initial'),
     ]
 
     for df, dash_style, colour, label in datasets:
@@ -714,7 +714,7 @@ df['Total cells at end'] = df['Mean EdU+BrdU+']+df['Mean EdU-BrdU+']+df['Mean Ed
 df['Labelled fraction'] = 1 - df['Mean EdU-BrdU-']/df['Total cells at end']
 
 #%%
-preprint_df = pd.read_json('DL bootstrap 11:07:2024-big concatted.json') # Can take a while for larger datasets
+preprint_df = pd.read_json('DPNL inference results.json') # Can take a while for larger datasets
 print('k1 values: ', preprint_df['k1'].unique(), ';', len(preprint_df['k1'].unique()), 'unique values of k1.')
 print('k2 values: ', preprint_df['k2'].unique(), ';', len(preprint_df['k2'].unique()), 'unique values of k2.')
 preprint_df['tg1'] = 1/preprint_df['k1']

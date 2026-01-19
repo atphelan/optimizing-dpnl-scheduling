@@ -933,16 +933,7 @@ def run_bootstrap(lookup_path, jobs=1, noisy_initial=False, cov_file=None, ks_as
 
     if ks_as_in_lookup:
         k_points = DoubleStainBatch.lookup_df[['k1', 'k2', 'k3']].copy()
-        # k_points = np.array([[0.0926279639977838, 0.12827295080492923, 0.18490275340413975],
-        #                     [0.09441308930039059,0.13172190533363753,0.17192479804406605]]) # For testing only a combo close to the mean k as representative
         k_points = k_points[np.logical_and(np.isclose(k_points['k1'], k_points['k1'].mean(), rtol=5E-2), np.isclose(k_points['k2'], k_points['k2'].mean(), rtol=5E-2))].to_numpy()
-        k_points = np.array(
-            [np.array([0.09090909090909091, 0.125, 0.2]),
-             np.array([0.0892528489543347, 0.12188991564458218, 0.2177818103542495]),
-             np.array([0.08180129814735072, 0.125, 0.2648827604847485]),
-             np.array([0.1002066333545786, 0.12188991564458218, 0.17192479804406605]),
-            ]
-        )
     else:
         k_points = hex_param_mesh(np.array([11,8,5]), 1/np.sqrt(6)*np.array([2,-1,-1]), 1/np.sqrt(6)*np.array([-1,-1,2])*0.5, 6)
         # k_points = hex_param_mesh(np.array([11,8,5]), 1/np.sqrt(6)*np.array([2,-1,-1]), 1/np.sqrt(6)*np.array([-1,-1,2])*0.5, 2)
@@ -963,9 +954,9 @@ def run_bootstrap(lookup_path, jobs=1, noisy_initial=False, cov_file=None, ks_as
         cov_file = cov_file
     )
     try:
-        DoubleStainBatch.summary_data.to_json(f"data/DL bootstrap {datetime.today().date()} {int(os.environ['PBS_ARRAY_INDEX'])} {f'noisy {DoubleStainBatch.alpha}'.replace('.', 'p') if noisy_initial else ''}2.json")
+        DoubleStainBatch.summary_data.to_json(f"data/DL bootstrap {datetime.today().date()} {int(os.environ['PBS_ARRAY_INDEX'])} {f'noisy {DoubleStainBatch.alpha}'.replace('.', 'p') if noisy_initial else ''} 10rep.json")
     except:
-        DoubleStainBatch.summary_data.to_json(f"data/DL bootstrap {datetime.today().date()} {f'noisy {DoubleStainBatch.alpha}'.replace('.', 'p') if noisy_initial else ''}2.json")
+        DoubleStainBatch.summary_data.to_json(f"data/DL bootstrap {datetime.today().date()} {f'noisy {DoubleStainBatch.alpha}'.replace('.', 'p') if noisy_initial else ''} 10rep.json")
     # Saving these in json to preserve np array and not lose all readability & keep library version generality
 
 def run_bootstrap_erlang(lookup_path, jobs=1, n_steps=10, noisy_initial=False):
@@ -1024,7 +1015,7 @@ def run_bootstrap_erlang(lookup_path, jobs=1, n_steps=10, noisy_initial=False):
     # Saving these in json to preserve np array and not lose all readability & keep library version generality
 
 
-def run_demo_experiment(lookup_path='data/DL analytic cov.json'):
+def run_demo_experiment(lookup_path='DPNL lookup.json'):
     edu_time = [0]
     wait_time = [0.5]
     period = [24]
@@ -1035,7 +1026,7 @@ def run_demo_experiment(lookup_path='data/DL analytic cov.json'):
         x_0=np.array([0]*12),
         extras=[1] 
     )
-    repeat_ensembles = [5]
+    repeat_ensembles = [10]
 
     if lookup_path[-4:] == '.csv':
         DoubleStainBatch.lookup_df = pd.read_csv(lookup_path)
@@ -1044,13 +1035,13 @@ def run_demo_experiment(lookup_path='data/DL analytic cov.json'):
     else:
         raise ValueError('Format of lookup table not understood. Please use CSV or JSON.')
 
-    k_points = np.array([np.array([1/12, 1/8, 1/4])]*15) # 3 repeats of the same parameters, middle-of-the-range
+    k_points = np.array([np.array([1/12, 1/8, 1/4])]*15) # 5 repeats of the same parameters, middle-of-the-range
     k_points += 1E-8*np.random.rand(15,3)
 
     if 'Cycle period' not in DoubleStainBatch.lookup_df.columns:
         DoubleStainBatch.lookup_df['Cycle period'] = 1/DoubleStainBatch.lookup_df['k1'] + 1/DoubleStainBatch.lookup_df['k2'] + 1/DoubleStainBatch.lookup_df['k3']
 
-    brdu_time = [1, 3]
+    brdu_time = [1, 3, 8]
     params = param_sweep_k_predefined(k_points, edu_time, brdu_time, wait_time, period, n, repeat_ensembles)
 
     DoubleStainBatch.run_bootstrap(
@@ -1067,7 +1058,7 @@ def run_demo_experiment(lookup_path='data/DL analytic cov.json'):
 if __name__ == '__main__':
     # print('Current working directory:', os.getcwd())
     # make_lookup(noisy_initial=True, cov_file='data/DL analytic cov noisy.json') # Makes a new look-up table from noisy initial conditions
-    run_bootstrap('data/DL lookup 2026-01-14 noisy 0p2.csv', noisy_initial=True, cov_file='data/DL analytic cov noisy.json', ks_as_in_lookup=True)
+    # run_bootstrap('data/DL lookup 2026-01-14 noisy 0p2.csv', noisy_initial=True, cov_file='data/DL analytic cov noisy.json', ks_as_in_lookup=True)
     # make_lookup_erlang(n_steps=4, noisy_initial=False)
     # df = pd.read_json('data/DL bootstrap 2025-12-20 erlang 4.json')
     # df = df.loc[np.logical_or(np.logical_or(df['SNR k1']>100.0, df['SNR k2']>100.0), np.logical_or(df['SNR k1'].isna(), df['SNR k2'].isna()))]
@@ -1078,3 +1069,6 @@ if __name__ == '__main__':
 
     # run_bootstrap('data/DL analytic cov templated.json', noisy_initial=False, cov_file='data/DL analytic cov templated.json', ks_as_in_lookup=True)
     # run_demo_experiment()
+
+    ### Increasing the number of repeats to 10
+    run_bootstrap('DPNL lookup.json', noisy_initial=False, ks_as_in_lookup=True)

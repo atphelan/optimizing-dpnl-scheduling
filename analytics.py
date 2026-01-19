@@ -98,7 +98,7 @@ def make_specific_solution_plot():
     if 'utils' != os.getcwd()[-5:]:
         os.chdir('utils')
     # print('Reading file')
-    df = pd.read_json('../optimisation/DL bootstrap 11:07:2024-big/DL bootstrap 11:07:2024-big concatted.json')
+    df = pd.read_json('DPNL inference results.json')
     # print('k1 values: ', df['k1'].unique(), ';', len(df['k1'].unique()), 'unique values of k1.')
     # print('k2 values: ', df['k2'].unique(), ';', len(df['k2'].unique()), 'unique values of k2.')
     df['tg1'] = 1/df['k1']

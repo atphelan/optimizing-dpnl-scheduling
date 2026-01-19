@@ -342,9 +342,9 @@ def sweep(template_df: pd.DataFrame = None):
     # Sweep run
     # --------------------------
     if template_df is None:
-        df_gill = pd.read_json('DL bootstrap 11:07:2024-big concatted.json')
+        df_gill = pd.read_json('DPNL inference results.json')
         df_new = df_gill[['k1', 'k2', 'k3', 'BrdU time', 'Initial G1', 'Initial S', 'Initial G2M']].copy()
-        fname = 'data/DL analytic cov.json'
+        fname = 'DPNL lookup.json'
     else:
         df_new = template_df[['k1', 'k2', 'k3', 'BrdU time', 'Initial G1', 'Initial S', 'Initial G2M']].copy()
         fname = 'data/DL analytic cov templated.json'
@@ -368,7 +368,7 @@ def noisy_sweep():
     # --------------------------
     # Sweep run, but initialise at [1,1,1] to find covariances of initial condition too
     # --------------------------
-    df_gill = pd.read_json('DL bootstrap 11:07:2024-big concatted.json')
+    df_gill = pd.read_json('DPNL inference results.json')
     n = sum(df_gill[['Initial G1', 'Initial S', 'Initial G2M']].iloc[0])
     df_new = df_gill[['k1', 'k2', 'k3', 'BrdU time', 'Initial G1', 'Initial S', 'Initial G2M']].copy()
     df_new['Covariance matrix'] = None
@@ -390,19 +390,24 @@ def noisy_sweep():
 #%%
 if __name__ == '__main__':
     # sweep()
-    noisy_sweep()
-    exit()
+    # noisy_sweep()
+    # exit()
 
-    g1_list = np.linspace(7,17,20)
-    s_list = np.linspace(6,12,16)
-    g2m_list = np.linspace(2,6,8)
+    k_points = hex_param_mesh(np.array([11,8,5]), 1/np.sqrt(6)*np.array([2,-1,-1]), 1/np.sqrt(6)*np.array([-1,-1,2])*0.5, 6)
+    params = [{'k1': ks[0], 'k2': ks[1], 'k3': ks[2]} for ks in k_points]
+    brdu_list = np.arange(1,13,1)
+
+
+    # g1_list = np.linspace(7,17,20)
+    # s_list = np.linspace(6,12,16)
+    # g2m_list = np.linspace(2,6,8)
     brdu_list = np.arange(1,13,2)
-    phase_times = [pts for pts in iprod(g1_list, s_list, g2m_list) if np.isclose(sum(pts), 24.0, atol=2.0)]
-    params = [{'k1': 1/ps[0], 'k2': 1/ps[1], 'k3': 1/ps[2]} for ps in phase_times]
+    # phase_times = [pts for pts in iprod(g1_list, s_list, g2m_list) if np.isclose(sum(pts), 24.0, atol=2.0)]
+    # params = [{'k1': 1/ps[0], 'k2': 1/ps[1], 'k3': 1/ps[2]} for ps in phase_times]
     
     template_df = pd.DataFrame(params)
     template_df['BrdU time'] = [brdu_list]*len(template_df)
     template_df[['Initial G1', 'Initial S', 'Initial G2M']] = 0
-    template_df[['Initial G1', 'Initial S', 'Initial G2M']] = template_df.apply(lambda row: generate_steady_state(row['k2']/row['k1'], row['k3']/row['k1'], 300).astype(int), axis='columns', result_type='expand')
+    template_df[['Initial G1', 'Initial S', 'Initial G2M']] = template_df.apply(lambda row: generate_steady_state(row['k2']/row['k1'], row['k3']/row['k1'], 1000).astype(int), axis='columns', result_type='expand')
     template_df = template_df.explode('BrdU time').reset_index(drop=True)
     sweep(template_df)
