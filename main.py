@@ -17,6 +17,6 @@ def optimize_counts(dt: int, edu: float, dp: float, brdu: float):
     return {"Optimal t_wait": int(result[0]), "SNR k2 from simulation": float(result[1])}
 
 @app.get("/optimize/phases")
-def optimize_phases(tg1: float, ts: float, tp: float):
+def optimize_phases(tg1: float, ts: float, tc: float):
     result = find_s_optimum_from_phases(tg1, ts, tc)
     return {"Optimal t_wait": int(result[0]), "SNR k2 from simulation": float(result[1])}
