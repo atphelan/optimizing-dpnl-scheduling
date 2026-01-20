@@ -89,7 +89,7 @@ def find_s_optimum_from_phases(tg1: float, ts: float, tc: float, print_only=Fals
                                                                                                                 ))]
     max_snr = comparable_series['SNR k2'].max()
     dt_opt = comparable_series[comparable_series['SNR k2'] == max_snr]['BrdU time'].iloc[0]
-    dt_opt = int(round(dt_opt * tc/24))
+    dt_opt = max(int(round(dt_opt * tc/24)), 1)
 
     if print_only:
         readout(dt_opt, max_snr, counts=False)
@@ -247,7 +247,7 @@ def find_custom_optimum_from_phases(tg1: float, ts: float, tc: float, g1_weight:
                                                                                                                 ))]
     max_snr = comparable_series['Objective SNR'].max()
     dt_opt = comparable_series[comparable_series['Objective SNR'] == max_snr]['BrdU time'].iloc[0]
-    dt_opt = int(round(dt_opt * tc/24))
+    dt_opt = max(int(round(dt_opt * tc/24)), 1)
 
     if print_only:
         readout(dt_opt, max_snr, counts=False)

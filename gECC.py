@@ -1026,7 +1026,7 @@ def run_demo_experiment(lookup_path='DPNL lookup.json'):
         x_0=np.array([0]*12),
         extras=[1] 
     )
-    repeat_ensembles = [10]
+    repeat_ensembles = [3]
 
     if lookup_path[-4:] == '.csv':
         DoubleStainBatch.lookup_df = pd.read_csv(lookup_path)
