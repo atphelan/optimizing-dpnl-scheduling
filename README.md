@@ -1,6 +1,6 @@
-### Dual Pulse Nucleoside Labeling experiment simulations ###
+# Dual Pulse Nucleoside Labeling simulations #
 
-# py file roles: #
+### py file roles: ###
 
  - gillespie.py is the base gillespie simulation class, detailing the iteration method and basic parameter inputs
  - gECC.py uses base classes from gillespie.py to implement dual pulse nucleoside labeling experiment batches
@@ -9,7 +9,7 @@
  - dpnl_optimizer_tool.py contains functions for recommending an optimal waiting time between pulses across a range of scenarios, with several example inputs.
  - main.py manages use of the dpnl_optimizer_tool.py code with the user-friendly site https://atphelan.github.io/optimising-dpnl-scheduling-ui/
 
-#Gillespie Simulations and numerics model the following process for measuring cell proliferation via the cell cycle: #
+### Gillespie Simulations and numerics model the following process for measuring cell proliferation via the cell cycle: ###
 
  - The system is initialised with a number of cells divided between G1, S and G2M phases according to steady-state proportions.
  - At time t=0, all S phase cells are labeled blue / EdU+
@@ -24,4 +24,4 @@ Plotting of the figures included in our work was carried out with the tools incl
 
 To test the robustness of results, Erlang-distributed cell cycle phase times and noisy initial conditions were simulated - code for these can be found in gECC.py.
 
-Alastar Phelan, January 2026.
+#### Alastar Phelan, January 2026. ####
