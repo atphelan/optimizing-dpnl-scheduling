@@ -8,6 +8,8 @@ from gECC import hex_param_mesh
 from itertools import product as iprod
 from gECC import generate_steady_state
 
+from datetime import datetime
+
 def build_base_matrices():
     n = 3
     S_base = np.array([[-1,  0, +2],
@@ -344,10 +346,11 @@ def sweep(template_df: pd.DataFrame = None):
     if template_df is None:
         df_gill = pd.read_json('DPNL inference results.json')
         df_new = df_gill[['k1', 'k2', 'k3', 'BrdU time', 'Initial G1', 'Initial S', 'Initial G2M']].copy()
-        fname = 'DPNL lookup.json'
+        fname = f'data/DPNL lookup {datetime.today().date()}.json'
     else:
         df_new = template_df[['k1', 'k2', 'k3', 'BrdU time', 'Initial G1', 'Initial S', 'Initial G2M']].copy()
-        fname = 'data/DL analytic cov templated.json'
+        df_new[['Initial G1', 'Initial S', 'Initial G2M']] = df_new[['Initial G1', 'Initial S', 'Initial G2M']]*2
+        fname = f'data/DL analytic cov templated {datetime.today().date()}.json'
     df_new['Covariance matrix'] = None
     for i, df_row in df_new.iterrows():
         k = df_row[['k1', 'k2', 'k3']]
@@ -389,9 +392,9 @@ def noisy_sweep():
 
 #%%
 if __name__ == '__main__':
-    # sweep()
+    sweep(template_df = pd.read_json('DPNL inference results.json'))
     # noisy_sweep()
-    # exit()
+    exit()
 
     k_points = hex_param_mesh(np.array([11,8,5]), 1/np.sqrt(6)*np.array([2,-1,-1]), 1/np.sqrt(6)*np.array([-1,-1,2])*0.5, 6)
     params = [{'k1': ks[0], 'k2': ks[1], 'k3': ks[2]} for ks in k_points]

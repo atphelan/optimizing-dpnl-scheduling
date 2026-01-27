@@ -443,7 +443,8 @@ class DualLabelingBatch(DualLabelingEnsemble):
             # new_row = gp_df.agg(agg)
             mean_row = pd.DataFrame(gp_df.agg(agg).iloc[0]).T
             std_row = pd.DataFrame(gp_df.agg(agg).iloc[1]).T
-            mean_row[[c.replace('Mean', 'Std') for c in corr_cols if 'Mean' in c]] = np.array(np.sqrt(self.repeats)*std_row[[c for c in corr_cols if 'Mean' in c]]) # Adjust ste to std
+            # mean_row[[c.replace('Mean', 'Std') for c in corr_cols if 'Mean' in c]] = np.array(np.sqrt(self.repeats)*std_row[[c for c in corr_cols if 'Mean' in c]]) # Adjust ste to std
+            mean_row[[c.replace('Mean', 'Std') for c in corr_cols if 'Mean' in c]] = np.array(std_row[[c for c in corr_cols if 'Mean' in c]]) # No adjustment
             matrix = np.corrcoef(gp_df[corr_cols[:-2]].copy().T).astype(object)
             mean_row['Ensemble Correlations'] = [matrix]
             compacted_df = pd.concat([compacted_df, mean_row.reset_index(drop=True)], axis='index')
@@ -922,7 +923,7 @@ def run_bootstrap(lookup_path, jobs=1, noisy_initial=False, cov_file=None, ks_as
         x_0=np.array([0]*12),
         extras=[jobs] # Jobs
     )
-    repeat_ensembles = [1000]
+    repeat_ensembles = [400]
 
     if lookup_path[-4:] == '.csv':
         DoubleStainBatch.lookup_df = pd.read_csv(lookup_path)
@@ -933,6 +934,7 @@ def run_bootstrap(lookup_path, jobs=1, noisy_initial=False, cov_file=None, ks_as
 
     if ks_as_in_lookup:
         k_points = DoubleStainBatch.lookup_df[['k1', 'k2', 'k3']].copy()
+        # Take 5% of points around the mean values of k1 and k2
         k_points = k_points[np.logical_and(np.isclose(k_points['k1'], k_points['k1'].mean(), rtol=5E-2), np.isclose(k_points['k2'], k_points['k2'].mean(), rtol=5E-2))].to_numpy()
     else:
         k_points = hex_param_mesh(np.array([11,8,5]), 1/np.sqrt(6)*np.array([2,-1,-1]), 1/np.sqrt(6)*np.array([-1,-1,2])*0.5, 6)
@@ -954,12 +956,12 @@ def run_bootstrap(lookup_path, jobs=1, noisy_initial=False, cov_file=None, ks_as
         cov_file = cov_file
     )
     try:
-        DoubleStainBatch.summary_data.to_json(f"data/DL bootstrap {datetime.today().date()} {int(os.environ['PBS_ARRAY_INDEX'])} {f'noisy {DoubleStainBatch.alpha}'.replace('.', 'p') if noisy_initial else ''} 10rep.json")
+        DoubleStainBatch.summary_data.to_json(f"data/DL bootstrap {datetime.today().date()} {int(os.environ['PBS_ARRAY_INDEX'])} {f'noisy {DoubleStainBatch.alpha}'.replace('.', 'p') if noisy_initial else ''} base.json")
     except:
-        DoubleStainBatch.summary_data.to_json(f"data/DL bootstrap {datetime.today().date()} {f'noisy {DoubleStainBatch.alpha}'.replace('.', 'p') if noisy_initial else ''} 10rep.json")
+        DoubleStainBatch.summary_data.to_json(f"data/DL bootstrap {datetime.today().date()} {f'noisy {DoubleStainBatch.alpha}'.replace('.', 'p') if noisy_initial else ''} base.json")
     # Saving these in json to preserve np array and not lose all readability & keep library version generality
 
-def run_bootstrap_erlang(lookup_path, jobs=1, n_steps=10, noisy_initial=False):
+def run_bootstrap_erlang(lookup_path, jobs=1, n_steps=10, noisy_initial=False, ks_as_in_lookup=True):
     edu_time = [0]
     brdu_time = list(range(1, 13, 1))
     wait_time = [0.5]
@@ -975,7 +977,7 @@ def run_bootstrap_erlang(lookup_path, jobs=1, n_steps=10, noisy_initial=False):
         x_0=np.array([0]*12*n_steps),
         extras=[jobs, n_steps]
     )
-    repeat_ensembles = [100]
+    repeat_ensembles = [200]
     # params = param_sweep_k_predefined(k_points, edu_time, brdu_time, wait_time, period, n, repeat_ensembles)
     if lookup_path[-4:] == '.csv':
         DoubleStainBatch.lookup_df = pd.read_csv(lookup_path)
@@ -983,22 +985,36 @@ def run_bootstrap_erlang(lookup_path, jobs=1, n_steps=10, noisy_initial=False):
         DoubleStainBatch.lookup_df = pd.read_json(lookup_path)
     else:
         raise ValueError('Format of lookup table not understood. Please use CSV or JSON.')
+    
+    if ks_as_in_lookup:
+        k_points = DoubleStainBatch.lookup_df[['k1', 'k2', 'k3']].copy()
+        # Take 5% of points around the mean values of k1 and k2
+        k_points = k_points[np.logical_and(np.isclose(k_points['k1'], k_points['k1'].mean(), rtol=5E-2), np.isclose(k_points['k2'], k_points['k2'].mean(), rtol=5E-2))].to_numpy()
+    else:
+        k_points = hex_param_mesh(np.array([11,8,5]), 1/np.sqrt(6)*np.array([2,-1,-1]), 1/np.sqrt(6)*np.array([-1,-1,2])*0.5, 6)
+        # k_points = hex_param_mesh(np.array([11,8,5]), 1/np.sqrt(6)*np.array([2,-1,-1]), 1/np.sqrt(6)*np.array([-1,-1,2])*0.5, 2)
+        # G1_list = np.linspace(7,17,20)
+        # S_list = np.linspace(6,12,40)
+
     if 'Wait time' not in DoubleStainBatch.lookup_df.columns:
         DoubleStainBatch.lookup_df['Wait time'] = 0.5
     if 'Cycle period' not in DoubleStainBatch.lookup_df.columns:
         DoubleStainBatch.lookup_df['Cycle period'] = 24.0
-    params = [df_row.to_dict() for _, df_row in DoubleStainBatch.lookup_df[['k1', 'k2', 'k3', 'BrdU time', 'Wait time']].iterrows()]
-    for idx in range(len(params)):
-        params[idx].update({
-            "edu_t": 0.0,
-            "brdu_t": params[idx]['BrdU time'],
-            "wait_t": params[idx]['Wait time'],
-            "cycle_period": 24.0,
-            "n": 300,
-            "repeat_ensembles": repeat_ensembles[0]
-        })
-    params = [p for p in params if np.logical_and(np.isclose(p['k1'], DoubleStainBatch.lookup_df['k1'].mean(), rtol=5E-2), np.isclose(p['k2'], DoubleStainBatch.lookup_df['k2'].mean(), rtol=5E-2))]
-    print(len(params))
+    # params = [df_row.to_dict() for _, df_row in DoubleStainBatch.lookup_df[['k1', 'k2', 'k3', 'BrdU time', 'Wait time']].iterrows()]
+    brdu_time = DoubleStainBatch.lookup_df['BrdU time'].unique()
+    params = param_sweep_k_predefined(k_points, edu_time, brdu_time, wait_time, period, n, repeat_ensembles)
+    
+    # for idx in range(len(params)):
+    #     params[idx].update({
+    #         "edu_t": 0.0,
+    #         "brdu_t": params[idx]['BrdU time'],
+    #         "wait_t": params[idx]['Wait time'],
+    #         "cycle_period": 24.0,
+    #         "n": 300,
+    #         "repeat_ensembles": repeat_ensembles[0]
+    #     })
+    # params = [p for p in params if np.logical_and(np.isclose(p['k1'], DoubleStainBatch.lookup_df['k1'].mean(), rtol=5E-2), np.isclose(p['k2'], DoubleStainBatch.lookup_df['k2'].mean(), rtol=5E-2))]
+    # print(len(params))
     params = np.random.choice(params, len(params), replace=False)
     if noisy_initial:
         DoubleStainBatch.alpha = 0.5
@@ -1026,7 +1042,7 @@ def run_demo_experiment(lookup_path='DPNL lookup.json'):
         x_0=np.array([0]*12),
         extras=[1] 
     )
-    repeat_ensembles = [3]
+    repeat_ensembles = [30]
 
     if lookup_path[-4:] == '.csv':
         DoubleStainBatch.lookup_df = pd.read_csv(lookup_path)
@@ -1062,13 +1078,15 @@ if __name__ == '__main__':
     # make_lookup_erlang(n_steps=4, noisy_initial=False)
     # df = pd.read_json('data/DL bootstrap 2025-12-20 erlang 4.json')
     # df = df.loc[np.logical_or(np.logical_or(df['SNR k1']>100.0, df['SNR k2']>100.0), np.logical_or(df['SNR k1'].isna(), df['SNR k2'].isna()))]
-    # run_bootstrap_erlang('data/DL analytic cov erlang 4.json', n_steps=4, noisy_initial=False)
+    # run_bootstrap_erlang('data/DL analytic cov erlang 4.json', n_steps=4, noisy_initial=False, ks_as_in_lookup=True)
     # print('Done!')
 
     ### Inference without a fixed period, all within 1 hour of 24 hours
 
     # run_bootstrap('data/DL analytic cov templated.json', noisy_initial=False, cov_file='data/DL analytic cov templated.json', ks_as_in_lookup=True)
-    # run_demo_experiment()
+    run_demo_experiment()
 
-    ### Increasing the number of repeats to 10
-    run_bootstrap('DPNL lookup.json', noisy_initial=False, ks_as_in_lookup=True)
+    ### Increasing the number of initial cells to 600
+    # run_bootstrap('data/DL analytic cov templated 2026-01-20.json', noisy_initial=False, ks_as_in_lookup=True)
+    ### Increasing the number of repeats per inference to 10
+    # run_bootstrap('DPNL lookup.json', noisy_initial=False, ks_as_in_lookup=True)

@@ -134,6 +134,8 @@ def hex_opt_plot(df, x, y, z, opt_c, opt_v, gridsize=(10, 10), normalise=False, 
 	ax.set_xlabel(x)
 	ax.set_ylabel(y)
 
+from scipy.interpolate import UnivariateSpline
+
 #%%
 def peak_splines(df, x, y, grouping, n_groups, colours='Blues', extremum='max'):
 	'''
@@ -160,8 +162,8 @@ def peak_splines(df, x, y, grouping, n_groups, colours='Blues', extremum='max'):
 			go.Scatter(
 				x=gdf[x], y=gdf[y],
 			  	line_shape='spline', name=str(gname),
-			  	marker=dict(size=7, color=gcol, line=dict(width=1.5)),
-				line=dict(color=gcol, width=4.0),
+			  	marker=dict(size=12, color=gcol, line=dict(width=1.8)),
+				line=dict(color=gcol, width=8.0),
 				showlegend=False,
 			)
 		)
@@ -170,20 +172,32 @@ def peak_splines(df, x, y, grouping, n_groups, colours='Blues', extremum='max'):
 		gcol = f"rgb({gcol[0]},{gcol[1]},{gcol[2]})"
 		gdf = gdf.groupby(x).agg({x: 'first', grouping: 'first', y: 'mean'})
 		# mark peak
+		# --- mark spline extremum ---
+		xs = gdf[x].values
+		ys = gdf[y].values
+
+		# fit spline through the plotted points
+		spline = UnivariateSpline(xs, ys, s=0)
+
+		# dense grid to find true extremum
+		x_dense = np.linspace(xs.min(), xs.max(), 500)
+		y_dense = spline(x_dense)
+
 		if extremum == 'max':
-			fig.add_trace(go.Scatter(
-				x=gdf.loc[gdf[y]==gdf[y].max()][x], y=gdf.loc[gdf[y]==gdf[y].max()][y],
-				marker=dict(color=gcol, size=14), marker_symbol='star', marker_line_width=2,
-				showlegend=False
-			))
+			i = np.argmax(y_dense)
 		elif extremum == 'min':
-			fig.add_trace(go.Scatter(
-				x=gdf.loc[gdf[y]==gdf[y].min()][x], y=gdf.loc[gdf[y]==gdf[y].min()][y],
-				marker=dict(color=gcol, size=14), marker_symbol='x', marker_line_width=2,
-				showlegend=False
-			))
+			i = np.argmin(y_dense)
 		else:
-			print('Please enter either max or min to mark extrema.')
+			raise ValueError("extremum must be 'max' or 'min'")
+
+		fig.add_trace(go.Scatter(
+			x=[x_dense[i]],
+			y=[y_dense[i]],
+			marker=dict(color=gcol, size=18),
+			marker_symbol='star',
+			marker_line_width=2,
+			showlegend=False
+		))
 
 	# To make the colourscale consistent between all curves and only appear once
 	fig.add_trace(go.Scatter(
@@ -206,10 +220,10 @@ def peak_splines(df, x, y, grouping, n_groups, colours='Blues', extremum='max'):
 		yaxis=dict(ticks='', showgrid=False, zeroline=False, nticks=11),# tickformat='.1e'),
 		autosize=False,
 		height=400,
-		width=600,
+		width=400,
 		margin=dict(l=0, r=0, t=0, b=0),
 		hovermode='closest',
-		font=dict(size=20),
+		font=dict(size=40),
 		boxmode='group',
 		legend=dict(
 			yanchor="top",
@@ -230,15 +244,15 @@ def peak_splines(df, x, y, grouping, n_groups, colours='Blues', extremum='max'):
 		linewidth=1,
 		linecolor='black',
 		mirror=True,
-		# range=[1.0, 12.01],
+		range=[1.0, 12.01],
 		dtick=1,
 	)
-	# fig.update_layout(
-	# 	xaxis = dict(
-	# 		tickmode = 'array',
-	# 		tickvals = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-	# 		ticktext=['1', '', '3', '', '5', '', '7', '', '9', '', '11', ''],		)
-	# )
+	fig.update_layout(
+		xaxis = dict(
+			tickmode = 'array',
+			tickvals = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+			ticktext=['1', '', '3', '', '5', '', '7', '', '9', '', '11', ''],		)
+	)
 	fig.update_yaxes(
 		zeroline=True,
 		zerolinewidth=3,
@@ -250,50 +264,51 @@ def peak_splines(df, x, y, grouping, n_groups, colours='Blues', extremum='max'):
 		linewidth=1,
 		linecolor='black',
 		mirror=True,
-		# range=[0.0, 20.0]
+		# range=[15.0, 40.0]
+	)
+	fig.update_layout(
+		yaxis = dict(
+			tickmode = 'array',
+			tickvals = [4, 5, 6, 7, 8, 9, 10],
+			ticktext=['4', '', '6', '', '8', '', '10'],		)
 	)
 	return fig
 
 #%%
 def peak_splines_three_datasets(
-    df_solid, # 3-stage cycle
-    df_dashed, # Erlang distributed cycle
-    df_dotted, # Noisy initial conditions
+    df_solid,   # 3-stage cycle
+    df_dashed,  # Erlang distributed cycle
+    df_dotted,  # Noisy initial conditions
     x,
     y,
     colours=('black', 'black', 'black'),
+    labels=('Series 1', 'Series 2', 'Series 3'),
 ):
     """
-    Plot mean y(x) curves from three datasets using solid, dashed, and dotted lines.
-
-    Parameters
-    ----------
-    df_solid, df_dashed, df_dotted : pandas.DataFrame
-        DataFrames containing columns x and y
-    x : str
-        Column name for x-axis
-    y : str
-        Column name for y-axis
-    colours : tuple
-        Line colours for the three curves
+    Plot mean y(x) curves from three datasets using solid, dashed, and dotted lines,
+    marking the maximum of the spline-interpolated curve.
     """
 
     layout = go.Layout(plot_bgcolor='white')
     fig = go.Figure(layout=layout)
 
     datasets = [
-        (df_solid, 'solid', colours[0], '3-stage cycle'),
-        (df_dashed, 'dash', colours[1], '12-stage cycle'),
-        (df_dotted, 'dot', colours[2], '3-stage + variable initial'),
+        (df_solid,  'solid', colours[0], labels[0]),
+        (df_dashed, 'dash',  colours[1], labels[1]),
+        (df_dotted, 'dot',   colours[2], labels[2]),
     ]
 
     for df, dash_style, colour, label in datasets:
         mean_curve = df.groupby(x)[y].mean().reset_index()
 
+        xs = mean_curve[x].values
+        ys = mean_curve[y].values
+
+        # plot spline
         fig.add_trace(
             go.Scatter(
-                x=mean_curve[x],
-                y=mean_curve[y],
+                x=xs,
+                y=ys,
                 line_shape='spline',
                 name=label,
                 line=dict(
@@ -304,12 +319,17 @@ def peak_splines_three_datasets(
             )
         )
 
-        # Mark peak
-        peak_row = mean_curve.loc[mean_curve[y].idxmax()]
+        # --- spline-based peak ---
+        spline = UnivariateSpline(xs, ys, s=0)
+        x_dense = np.linspace(xs.min(), xs.max(), 500)
+        y_dense = spline(x_dense)
+
+        i_max = np.argmax(y_dense)
+
         fig.add_trace(
             go.Scatter(
-                x=[peak_row[x]],
-                y=[peak_row[y]],
+                x=[x_dense[i_max]],
+                y=[y_dense[i_max]],
                 mode='markers',
                 marker=dict(
                     symbol='star',
@@ -329,8 +349,8 @@ def peak_splines_three_datasets(
         hovermode='closest',
         font=dict(size=20),
         legend=dict(
-            yanchor="bottom",
-            y=0.05,
+            yanchor="top",
+            y=0.95,
             xanchor="right",
             x=0.95,
             bordercolor='dimgrey',
@@ -349,6 +369,7 @@ def peak_splines_three_datasets(
         linecolor='black',
         mirror=True,
         dtick=1,
+		range=[1.0,12.25]
     )
 
     fig.update_yaxes(
@@ -362,9 +383,11 @@ def peak_splines_three_datasets(
         linecolor='black',
         mirror=True,
         nticks=8,
+		range=[15.0, 55.0]
     )
 
     return fig
+
 
 # %%
 def opt_dt_vs_x(df, x, grouping, opt_indep, opt_score, colours='Blues', extra_grouping=[]):
@@ -540,6 +563,98 @@ def plotly_scatter(df, x, y, c, colourscheme='Viridis', trendline=False):
 	return fig
 
 #%%
+
+def plotly_2lines(df1, x1, y1, df2, x2, y2, colours=('red', 'blue')):
+    layout = go.Layout(
+        plot_bgcolor='white',
+        yaxis2=dict(
+            overlaying='y',
+            side='right',
+            showgrid=False,
+            zeroline=False,
+            linewidth=1.5,
+            linecolor='black',
+            mirror=True,
+        )
+    )
+
+    fig = go.Figure(layout=layout)
+
+    # First line (left y-axis)
+    fig.add_trace(
+        go.Scatter(
+            x=df1[x1],
+            y=df1[y1],
+            mode='lines',
+            name=y1,
+            line=dict(color=colours[0], width=3, dash='dot'),
+        )
+    )
+
+    # Second line (right y-axis)
+    fig.add_trace(
+        go.Scatter(
+            x=df2[x2],
+            y=df2[y2],
+            mode='lines',
+            name=y2,
+            # yaxis='y2',
+            line=dict(color=colours[1], width=3, dash='dash'),
+        )
+    )
+
+    fig.update_layout(
+        # xaxis_title=dict(text=label_lookup.get(x1, None), font=dict(size=24)),
+        yaxis_title=dict(text=y1, font=dict(size=24)),
+        yaxis2_title=dict(text=y2, font=dict(size=24)),
+        autosize=False,
+        height=400,
+        width=600,
+        margin=dict(l=0, r=0, t=0, b=0),
+        hovermode='closest',
+        font=dict(size=18),
+        legend=dict(
+            yanchor="top",
+            y=0.95,
+            xanchor="right",
+            x=0.95,
+            bordercolor='dimgrey',
+            borderwidth=2,
+        ),
+    )
+
+    fig.update_xaxes(
+        zeroline=True,
+        zerolinewidth=2,
+        zerolinecolor='black',
+        showgrid=True,
+        gridwidth=1,
+        gridcolor='gray',
+        linewidth=1.5,
+        linecolor='black',
+        mirror=True,
+        nticks=13,
+		range=[1.0, 12.01]
+    )
+
+    fig.update_yaxes(
+        zeroline=True,
+        zerolinewidth=2,
+        zerolinecolor='black',
+        showgrid=True,
+        gridwidth=1,
+        gridcolor='gray',
+        nticks=10,
+        linewidth=1.5,
+        linecolor='black',
+        mirror=True,
+		# range=[0.0, 45.0]
+    )
+
+    return fig
+
+
+#%%
 def demo_plot(df, x, y, c, lookup_df, colourscheme='Viridis'):
 	'''
 	Plot scatterpoints on a graph for x and y, color points by c and show how close they are to the ground truth
@@ -630,7 +745,7 @@ def demo_plot(df, x, y, c, lookup_df, colourscheme='Viridis'):
 		linecolor='black',
 		mirror=True,
 		# dtick=1,
-		# range=[40.0, 100.0],
+		# range=[0.0, 45.0],
 	)
 	return fig
 
@@ -700,33 +815,33 @@ DATA IMPORT PART
 #%%
 print('Reading files')
 df = pd.read_json('data/DL bootstrap 2025-12-03.json') # Mahalanobis distance used
-print('k1 values: ', df['k1'].unique(), ';', len(df['k1'].unique()), 'unique values of k1.')
-print('k2 values: ', df['k2'].unique(), ';', len(df['k2'].unique()), 'unique values of k2.')
-df['tg1'] = 1/df['k1']
-df['ts'] = 1/df['k2']
-df['tg2m'] = 1/df['k3']
-df['x'] = df['Initial G1']/(df['Initial G1']+df['Initial S']+df['Initial G2M'])
-df['y'] = df['Initial S']/(df['Initial G1']+df['Initial S']+df['Initial G2M'])
-df['z'] = df['Initial G2M']/(df['Initial G1']+df['Initial S']+df['Initial G2M'])
-for k in ['k1', 'k2']:
-	df[f'Relative error {k}'] = (df[k] - df[f'Mean inferred {k}'])/df[f'Std inferred {k}']
-df['Total cells at end'] = df['Mean EdU+BrdU+']+df['Mean EdU-BrdU+']+df['Mean EdU+BrdU-']+df['Mean EdU-BrdU-']
-df['Labelled fraction'] = 1 - df['Mean EdU-BrdU-']/df['Total cells at end']
+# print('k1 values: ', df['k1'].unique(), ';', len(df['k1'].unique()), 'unique values of k1.')
+# print('k2 values: ', df['k2'].unique(), ';', len(df['k2'].unique()), 'unique values of k2.')
+# df['tg1'] = 1/df['k1']
+# df['ts'] = 1/df['k2']
+# df['tg2m'] = 1/df['k3']
+# df['x'] = df['Initial G1']/(df['Initial G1']+df['Initial S']+df['Initial G2M'])
+# df['y'] = df['Initial S']/(df['Initial G1']+df['Initial S']+df['Initial G2M'])
+# df['z'] = df['Initial G2M']/(df['Initial G1']+df['Initial S']+df['Initial G2M'])
+# for k in ['k1', 'k2']:
+# 	df[f'Relative error {k}'] = (df[k] - df[f'Mean inferred {k}'])/df[f'Std inferred {k}']
+# df['Total cells at end'] = df['Mean EdU+BrdU+']+df['Mean EdU-BrdU+']+df['Mean EdU+BrdU-']+df['Mean EdU-BrdU-']
+# df['Labelled fraction'] = 1 - df['Mean EdU-BrdU-']/df['Total cells at end']
 
 #%%
 preprint_df = pd.read_json('DPNL inference results.json') # Can take a while for larger datasets
-print('k1 values: ', preprint_df['k1'].unique(), ';', len(preprint_df['k1'].unique()), 'unique values of k1.')
-print('k2 values: ', preprint_df['k2'].unique(), ';', len(preprint_df['k2'].unique()), 'unique values of k2.')
-preprint_df['tg1'] = 1/preprint_df['k1']
-preprint_df['ts'] = 1/preprint_df['k2']
-preprint_df['tg2m'] = 1/preprint_df['k3']
-preprint_df['x'] = preprint_df['Initial G1']/(preprint_df['Initial G1']+preprint_df['Initial S']+preprint_df['Initial G2M'])
-preprint_df['y'] = preprint_df['Initial S']/(preprint_df['Initial G1']+preprint_df['Initial S']+preprint_df['Initial G2M'])
-preprint_df['z'] = preprint_df['Initial G2M']/(preprint_df['Initial G1']+preprint_df['Initial S']+preprint_df['Initial G2M'])
-for k in ['k1', 'k2']:
-	preprint_df[f'Relative error {k}'] = (preprint_df[k] - preprint_df[f'Mean inferred {k}'])/preprint_df[f'Std inferred {k}']
-preprint_df['Total cells at end'] = preprint_df['Mean EdU+BrdU+']+preprint_df['Mean EdU-BrdU+']+preprint_df['Mean EdU+BrdU-']+preprint_df['Mean EdU-BrdU-']
-preprint_df['Labelled fraction'] = 1 - preprint_df['Mean EdU-BrdU-']/preprint_df['Total cells at end']
+# print('k1 values: ', preprint_df['k1'].unique(), ';', len(preprint_df['k1'].unique()), 'unique values of k1.')
+# print('k2 values: ', preprint_df['k2'].unique(), ';', len(preprint_df['k2'].unique()), 'unique values of k2.')
+# preprint_df['tg1'] = 1/preprint_df['k1']
+# preprint_df['ts'] = 1/preprint_df['k2']
+# preprint_df['tg2m'] = 1/preprint_df['k3']
+# preprint_df['x'] = preprint_df['Initial G1']/(preprint_df['Initial G1']+preprint_df['Initial S']+preprint_df['Initial G2M'])
+# preprint_df['y'] = preprint_df['Initial S']/(preprint_df['Initial G1']+preprint_df['Initial S']+preprint_df['Initial G2M'])
+# preprint_df['z'] = preprint_df['Initial G2M']/(preprint_df['Initial G1']+preprint_df['Initial S']+preprint_df['Initial G2M'])
+# for k in ['k1', 'k2']:
+# 	preprint_df[f'Relative error {k}'] = (preprint_df[k] - preprint_df[f'Mean inferred {k}'])/preprint_df[f'Std inferred {k}']
+# preprint_df['Total cells at end'] = preprint_df['Mean EdU+BrdU+']+preprint_df['Mean EdU-BrdU+']+preprint_df['Mean EdU+BrdU-']+preprint_df['Mean EdU-BrdU-']
+# preprint_df['Labelled fraction'] = 1 - preprint_df['Mean EdU-BrdU-']/preprint_df['Total cells at end']
 
 '''
 PLOTTING BELOW
@@ -807,3 +922,65 @@ df_ts8.plot('BrdU time', 'Mean EdU-BrdU-', kind='scatter', ax=ax, color='k')
 ax = df_ts8.plot('BrdU time', 'SNR k2', kind='scatter')
 df_ts8['Guess SNR k2'] = df_ts8['Mean EdU+BrdU+']*df_ts8['Mean EdU+BrdU-']*df_ts8['Mean EdU-BrdU+']*df_ts8['Mean EdU-BrdU-']/(df_ts8['Std EdU+BrdU+']*df_ts8['Std EdU+BrdU-']*df_ts8['Std EdU-BrdU+']*df_ts8['Std EdU-BrdU-'])
 df_ts8.plot('BrdU time', 'Guess SNR k2', kind='scatter', ax=ax, color='m')
+
+#%%
+df_600 = pd.read_json('data/DL bootstrap 2026-01-21  600init.json')
+df_10r = pd.read_json('data/DL bootstrap 2026-01-22  10rep.json')
+peak_splines_three_datasets(preprint_df[np.logical_and(np.isclose(preprint_df['k1'], preprint_df['k1'].mean(), rtol=0.05), np.isclose(preprint_df['k2'], preprint_df['k2'].mean(), rtol=0.05))], df_10r, df_600, 'BrdU time', 'SNR k2')
+
+#%%
+label_means = [f'Mean {g}' for g in gates]
+label_stds = [s.replace('Mean', 'Std') for s in label_means]
+def get_central_sensitivity(df, p='tg1', dp=0.03, label_means=label_means, rtolref=0.02, rtolpert=0.08, scale_by_param=True):
+	
+	tg1_ref = df['tg1'].mean()
+	ts_ref = df['ts'].mean()
+	
+	wait_col = 'BrdU time'
+	label_stds = [s.replace('Mean', 'Std') for s in label_means]
+
+	# --- select reference and perturbed rows ---
+	ref = df[
+		(np.isclose(df['tg1'], tg1_ref, rtol=rtolref)) &
+		(np.isclose(df['ts'], ts_ref, rtol=rtolref))
+	].copy()
+
+	if ref.empty:
+		raise ValueError('No reference mesh points found. Consider a larger rtolref.')
+	elif len(ref)>12:
+		raise ValueError('Multiple reference mesh points found. Lower rtolref.')
+
+	pert = df[
+		(np.isclose(df['tg1'], tg1_ref + (dp if p=='tg1' else 0), rtol=rtolpert)) &
+		(np.isclose(df['ts'], ts_ref + (dp if p=='ts' else 0), rtol=rtolpert))
+	].copy()
+
+	if pert.empty:
+		raise ValueError('No pertubed mesh points found. Consider a larger rtolpert.')
+	elif len(pert)>12:
+		raise ValueError('Multiple perturbed mesh points found. Lower rtolpert.')
+
+
+	ref = ref.sort_values(wait_col).set_index(wait_col)
+	pert = pert.sort_values(wait_col).set_index(wait_col)
+
+	common_times = ref.index.intersection(pert.index)
+	ref = ref.loc[common_times]
+	pert = pert.loc[common_times]
+
+	sens = (pert[label_means] - ref[label_means]) / (dp if scale_by_param else 1)
+	snr_sens = np.zeros(len(ref))
+
+	for m, s in zip(label_means, label_stds):
+		snr_sens += (sens[m] ** 2) / (ref[s] ** 2)
+
+	snr_sens = pd.Series(
+		snr_sens,
+		index=common_times,
+		name='Sensitivity ' + p
+	)
+
+	return snr_sens
+
+
+#%%
