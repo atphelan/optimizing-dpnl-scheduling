@@ -26,7 +26,8 @@ label_lookup = {
 	"k2": r"$\Large{k_2}$",
 	"T_S error": r"$\Large{T_S \text{ error}}$",
 	"log T_S error": r"$\Large{log_{10}(T_S) \text{ relative error}}$",
-	"T_S": r"$\Large{\text{Exact }\ T_S\ \text{ (hours)}}$",
+	"tg1": r"$\Large{t_{G_1}}$",
+	"ts": r"$\Large{t_S}$",
 	"T_S formula": r"$\Large{\text{Inferred }\ T_S\ \text{ (hours)}}$",
 	"1/k2": r"$\Large{\frac{1}{k_2}}$",
 	"log T_G_1": r"$\Large{log_{10}(T_{G_1})}$",
@@ -39,14 +40,14 @@ label_lookup = {
 	"EdU+BrdU-": r"$\large{EdU^+BrdU^-}$",# \ \text{cells}}$",
 	"EdU+BrdU+": r"$\large{EdU^+BrdU^+}$",# \ \text{cells}}$",
 	"EdU-BrdU+": r"$\large{EdU^-BrdU^+}$",# \ \text{cells}}$",
-	"mean EdU-BrdU-": r"$\large{\langle EdU^-BrdU^-\rangle}$",
-	"mean EdU+BrdU-": r"$\large{\langle EdU^+BrdU^-\rangle}$",
-	"mean EdU+BrdU+": r"$\large{\langle EdU^+BrdU^+\rangle}$",
-	"mean EdU-BrdU+": r"$\large{\langle EdU^-BrdU^+\rangle}$",
-	"std EdU-BrdU-": r"$\large{\sigma(EdU^-BrdU^- \ \text{cells})}$",
-	"std EdU+BrdU-": r"$\large{\sigma(EdU^+BrdU^- \ \text{cells})}$",
-	"std EdU+BrdU+": r"$\large{\sigma(EdU^+BrdU^+ \ \text{cells})}$",
-	"std EdU-BrdU+": r"$\large{\sigma(EdU^-BrdU^+ \ \text{cells})}$",
+	"Mean EdU-BrdU-": r"$\large{\langle N(EdU^-BrdU^-)\rangle \ }$",
+	"Mean EdU+BrdU-": r"$\large{\langle N(EdU^+BrdU^-)\rangle \ }$",
+	"Mean EdU+BrdU+": r"$\large{\langle N(EdU^+BrdU^+)\rangle \ }$",
+	"Mean EdU-BrdU+": r"$\large{\langle N(EdU^-BrdU^+)\rangle \ }$",
+	"Std EdU-BrdU-": r"$\large{\sigma_{N(EdU^-BrdU^-)}\ }$",
+	"Std EdU+BrdU-": r"$\large{\sigma_{N(EdU^+BrdU^-)}\ }$",
+	"Std EdU+BrdU+": r"$\large{\sigma_{N(EdU^+BrdU^+)}\ }$",
+	"Std EdU-BrdU+": r"$\large{\sigma_{N(EdU^-BrdU^+)}\ }$",
 	"SNR EdU-BrdU-": r"$\large{\text{SNR}(EdU^-BrdU^-)}$",
 	"SNR EdU+BrdU-": r"$\large{\text{SNR}(EdU^+BrdU^-)}$",
 	"SNR EdU+BrdU+": r"$\large{\text{SNR}(EdU^+BrdU^+)}$",
@@ -162,8 +163,8 @@ def peak_splines(df, x, y, grouping, n_groups, colours='Blues', extremum='max'):
 			go.Scatter(
 				x=gdf[x], y=gdf[y],
 			  	line_shape='spline', name=str(gname),
-			  	marker=dict(size=12, color=gcol, line=dict(width=1.8)),
-				line=dict(color=gcol, width=8.0),
+			  	marker=dict(size=8, color=gcol, line=dict(width=1.8)),
+				line=dict(color=gcol, width=4.0),
 				showlegend=False,
 			)
 		)
@@ -183,29 +184,38 @@ def peak_splines(df, x, y, grouping, n_groups, colours='Blues', extremum='max'):
 		x_dense = np.linspace(xs.min(), xs.max(), 500)
 		y_dense = spline(x_dense)
 
+		skip_extremum_marker = False
 		if extremum == 'max':
 			i = np.argmax(y_dense)
 		elif extremum == 'min':
 			i = np.argmin(y_dense)
+		elif extremum == 'none' or extremum is None:
+			skip_extremum_marker = True
 		else:
-			raise ValueError("extremum must be 'max' or 'min'")
+			raise ValueError("extremum must be 'max', 'min', or 'none'")
 
-		fig.add_trace(go.Scatter(
-			x=[x_dense[i]],
-			y=[y_dense[i]],
-			marker=dict(color=gcol, size=18),
-			marker_symbol='star',
-			marker_line_width=2,
-			showlegend=False
-		))
+		if not skip_extremum_marker:
+			fig.add_trace(go.Scatter(
+				x=[x_dense[i]],
+				y=[y_dense[i]],
+				marker=dict(color=gcol, size=18),
+				marker_symbol='star',
+				marker_line_width=2,
+				showlegend=False
+			))
 
 	# To make the colourscale consistent between all curves and only appear once
 	fig.add_trace(go.Scatter(
-		x=np.array([1,2]), y=np.array([binned_df[y].mean()]*2),
+		x=np.array([1,2]),
+		y=np.array([binned_df[y].mean()]*2),
 		opacity=0,
 		marker=dict(
 			color=np.array([min_g, max_g]),
-			colorbar={'title':grouping, 'nticks': 8, 'thickness': 18},
+			colorbar=dict(
+				title=dict(text=grouping, side="top"),
+				nticks=8,
+				thickness=18
+			),
 			colorscale=colours,
 		),
 		showlegend=False,
@@ -215,17 +225,19 @@ def peak_splines(df, x, y, grouping, n_groups, colours='Blues', extremum='max'):
 	# 	marker=dict(size=12, line=dict(width=2,)),
 	# 	selector=dict(mode='markers')
 	# )
+
 	fig.update_layout(
 		xaxis=dict(ticks='', showgrid=False, zeroline=False, nticks=11),
-		yaxis=dict(ticks='', showgrid=False, zeroline=False, nticks=11),# tickformat='.1e'),
+		yaxis=dict(ticks='', showgrid=False, zeroline=False, nticks=11),#, tickformat='.1e'),
 		autosize=False,
 		height=400,
-		width=400,
+		width=600,
 		margin=dict(l=0, r=0, t=0, b=0),
 		hovermode='closest',
-		font=dict(size=40),
+		font=dict(size=22),
 		boxmode='group',
 		legend=dict(
+			title="Test",
 			yanchor="top",
 			y=0.95,
 			xanchor="left",
@@ -247,12 +259,12 @@ def peak_splines(df, x, y, grouping, n_groups, colours='Blues', extremum='max'):
 		range=[1.0, 12.01],
 		dtick=1,
 	)
-	fig.update_layout(
-		xaxis = dict(
-			tickmode = 'array',
-			tickvals = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-			ticktext=['1', '', '3', '', '5', '', '7', '', '9', '', '11', ''],		)
-	)
+	# fig.update_layout(
+	# 	xaxis = dict(
+	# 		tickmode = 'array',
+	# 		tickvals = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+	# 		ticktext=['1', '', '3', '', '5', '', '7', '', '9', '', '11', ''],		)
+	# )
 	fig.update_yaxes(
 		zeroline=True,
 		zerolinewidth=3,
@@ -264,129 +276,317 @@ def peak_splines(df, x, y, grouping, n_groups, colours='Blues', extremum='max'):
 		linewidth=1,
 		linecolor='black',
 		mirror=True,
-		# range=[15.0, 40.0]
+		# range=[0.0, 0.11],
+		range=[15,40.01],
+		# showexponent='all',
+		# exponentformat='E',
 	)
+
+	# fig.update_layout(
+	# 	yaxis = dict(
+	# 		tickmode = 'array',
+	# 		tickvals = [4, 5, 6, 7, 8, 9, 10],
+	# 		ticktext=['4', '', '6', '', '8', '', '10'],		)
+	# )
+
+	# fig.add_annotation(
+	# 	text=r"$\left| \frac{\langle t_{G_1}^{inf}\rangle \ - \  t_{G_1}^{true}}{t_{G_1}^{true}} \right| \ \ $", 
+	# 	align='left',
+	# 	showarrow=False,
+	# 	xref='x domain',
+	# 	yref='y domain',
+	# 	x=0.95,
+	# 	y=0.95,
+	# 	bordercolor='black',
+	# 	borderwidth=2,
+	# 	bgcolor="white",
+	# 	font=dict(size=32),
+	# 	borderpad=12,
+	# )
+	
+	return fig
+
+
+#%%
+def four_curve_plot(
+	df_lines,
+	df_points,
+	x,
+	y,
+	loc_vars=['k1', 'k2'],
+	pct_window=5,
+	err_prop=0.1,
+):
+	"""
+	Plot four curves with proportional error bars and cross markers
+	using separate dataframes for lines and points.
+
+	Parameters
+	----------
+	df_lines : pandas.DataFrame
+		Data used to compute spline lines and error bars
+	df_points : pandas.DataFrame
+		Data used for cross markers
+	x : str
+		x-axis column
+	y : list[str]
+		Four dataframe columns defining the curves
+	loc_vars : list[str]
+		Variables used to filter around their mean
+	pct_window : float
+		Percent window around mean used to select rows
+	err_prop : float
+		Error bar size as proportion of y
+	"""
+
+	colours = ['dodgerblue', 'orangered', 'darkviolet', 'grey']
+
+	layout = go.Layout(plot_bgcolor='white')
+	fig = go.Figure(layout=layout)
+
+	# --- window filter based on df_lines ---
+	m = df_lines[loc_vars].mean().to_numpy()
+	window = pct_window / 100
+
+	subset_lines = df_lines.copy()
+	subset_points = df_points.copy()
+
+	for i, v in enumerate(loc_vars):
+		subset_lines = subset_lines[
+			(subset_lines[v] >= m[i] * (1 - window)) &
+			(subset_lines[v] <= m[i] * (1 + window))
+		]
+
+		subset_points = subset_points[
+			(subset_points[v] >= m[i] * (1 - window)) &
+			(subset_points[v] <= m[i] * (1 + window))
+		]
+
+	# --- draw curves ---
+	for var, colour in zip(y, colours):
+
+		gdf_lines = (
+			subset_lines
+			.groupby(x, as_index=False)[var]
+			.mean()
+			.sort_values(x)
+		)
+
+		gdf_points = (
+			subset_points
+			.groupby(x, as_index=False)[var]
+			.mean()
+			.sort_values(x)
+		)
+
+		# yerr = gdf_lines[var] * err_prop
+		yerr = np.mean(gdf_lines[var])/np.sqrt(gdf_lines[var]) * err_prop
+
+		# spline line + error bars
+		fig.add_trace(
+			go.Scatter(
+				x=gdf_lines[x],
+				y=gdf_lines[var],
+				mode='lines',
+				line_shape='spline',
+				name=label_lookup.get(var),
+				line=dict(color=colour, width=2,),
+				error_y=dict(
+					type='data',
+					array=yerr,
+					# visible=True,
+					visible=False,
+					width=6,
+					color=colour,
+				),
+			)
+		)
+
+		# cross markers from second dataframe
+		fig.add_trace(
+			go.Scatter(
+				x=gdf_points[x],
+				y=gdf_points[var],
+				mode='markers',
+				marker=dict(
+					symbol='x-thin',
+					size=8,
+					color=colour,
+					line=dict(width=2, color=colour),
+				),
+				showlegend=False
+			)
+		)
+
 	fig.update_layout(
-		yaxis = dict(
-			tickmode = 'array',
-			tickvals = [4, 5, 6, 7, 8, 9, 10],
-			ticktext=['4', '', '6', '', '8', '', '10'],		)
+		xaxis=dict(ticks='', showgrid=False, zeroline=False, nticks=11),
+		yaxis=dict(ticks='', showgrid=False, zeroline=False, nticks=11),#, tickformat='.1e'),
+		autosize=False,
+		height=300,
+		width=500,
+		margin=dict(l=0, r=0, t=0, b=0),
+		hovermode='closest',
+		font=dict(size=24),
+		legend=dict(
+			# yanchor="bottom",
+			# y=0.05,
+			yanchor="top",
+			y=0.82,
+			xanchor="left",
+			x=0.1,
+			bordercolor='dimgrey',
+			borderwidth=2,
+			font=dict(size=18),
+			itemwidth=30
+		),
 	)
+
+	fig.update_xaxes(
+		zeroline=True,
+		zerolinewidth=3,
+		zerolinecolor='black',
+		showgrid=True,
+		gridwidth=2,
+		gridcolor='gray',
+		linewidth=1,
+		linecolor='black',
+		mirror=True,
+		dtick=1,
+		range=[1,12.01]
+	)
+
+	fig.update_yaxes(
+		zeroline=True,
+		zerolinewidth=3,
+		zerolinecolor='black',
+		showgrid=True,
+		gridwidth=2,
+		gridcolor='gray',
+		nticks=8,
+		linewidth=1,
+		linecolor='black',
+		mirror=True,
+		range = [0,230],
+		# range=[0,11],
+		# showexponent='all',
+		# exponentformat='E',
+	)
+
 	return fig
 
 #%%
 def peak_splines_three_datasets(
-    df_solid,   # 3-stage cycle
-    df_dashed,  # Erlang distributed cycle
-    df_dotted,  # Noisy initial conditions
-    x,
-    y,
-    colours=('black', 'black', 'black'),
-    labels=('Series 1', 'Series 2', 'Series 3'),
+	df_solid,   # 3-stage cycle
+	df_dashed,  # Erlang distributed cycle
+	df_dotted,  # Noisy initial conditions
+	x,
+	y,
+	colours=('black', 'black', 'black'),
+	labels=('Series 1', 'Series 2', 'Series 3'),
 ):
-    """
-    Plot mean y(x) curves from three datasets using solid, dashed, and dotted lines,
-    marking the maximum of the spline-interpolated curve.
-    """
+	"""
+	Plot mean y(x) curves from three datasets using solid, dashed, and dotted lines,
+	marking the maximum of the spline-interpolated curve.
+	"""
 
-    layout = go.Layout(plot_bgcolor='white')
-    fig = go.Figure(layout=layout)
+	layout = go.Layout(plot_bgcolor='white')
+	fig = go.Figure(layout=layout)
 
-    datasets = [
-        (df_solid,  'solid', colours[0], labels[0]),
-        (df_dashed, 'dash',  colours[1], labels[1]),
-        (df_dotted, 'dot',   colours[2], labels[2]),
-    ]
+	datasets = [
+		(df_solid,  'solid', colours[0], labels[0]),
+		(df_dashed, 'dash',  colours[1], labels[1]),
+		(df_dotted, 'dot',   colours[2], labels[2]),
+	]
 
-    for df, dash_style, colour, label in datasets:
-        mean_curve = df.groupby(x)[y].mean().reset_index()
+	for df, dash_style, colour, label in datasets:
+		mean_curve = df.groupby(x)[y].mean().reset_index()
 
-        xs = mean_curve[x].values
-        ys = mean_curve[y].values
+		xs = mean_curve[x].values
+		ys = mean_curve[y].values
 
-        # plot spline
-        fig.add_trace(
-            go.Scatter(
-                x=xs,
-                y=ys,
-                line_shape='spline',
-                name=label,
-                line=dict(
-                    color=colour,
-                    width=4.0,
-                    dash=dash_style
-                ),
-            )
-        )
+		# plot spline
+		fig.add_trace(
+			go.Scatter(
+				x=xs,
+				y=ys,
+				line_shape='spline',
+				name=label,
+				line=dict(
+					color=colour,
+					width=4.0,
+					dash=dash_style
+				),
+			)
+		)
 
-        # --- spline-based peak ---
-        spline = UnivariateSpline(xs, ys, s=0)
-        x_dense = np.linspace(xs.min(), xs.max(), 500)
-        y_dense = spline(x_dense)
+		# --- spline-based peak ---
+		spline = UnivariateSpline(xs, ys, s=0)
+		x_dense = np.linspace(xs.min(), xs.max(), 500)
+		y_dense = spline(x_dense)
 
-        i_max = np.argmax(y_dense)
+		i_max = np.argmax(y_dense)
 
-        fig.add_trace(
-            go.Scatter(
-                x=[x_dense[i_max]],
-                y=[y_dense[i_max]],
-                mode='markers',
-                marker=dict(
-                    symbol='star',
-                    size=12,
-                    color=colour,
-                    line=dict(width=1.5, color='black'),
-                ),
-                showlegend=False,
-            )
-        )
+		fig.add_trace(
+			go.Scatter(
+				x=[x_dense[i_max]],
+				y=[y_dense[i_max]],
+				mode='markers',
+				marker=dict(
+					symbol='star',
+					size=12,
+					color=colour,
+					line=dict(width=1.5, color='black'),
+				),
+				showlegend=False,
+			)
+		)
 
-    fig.update_layout(
-        autosize=False,
-        height=400,
-        width=600,
-        margin=dict(l=0, r=0, t=0, b=0),
-        hovermode='closest',
-        font=dict(size=20),
-        legend=dict(
-            yanchor="top",
-            y=0.95,
-            xanchor="right",
-            x=0.95,
-            bordercolor='dimgrey',
-            borderwidth=2,
-        ),
-    )
+	fig.update_layout(
+		autosize=False,
+		height=400,
+		width=600,
+		margin=dict(l=0, r=0, t=0, b=0),
+		hovermode='closest',
+		font=dict(size=20),
+		legend=dict(
+			yanchor="top",
+			y=0.95,
+			xanchor="right",
+			x=0.95,
+			bordercolor='dimgrey',
+			borderwidth=2,
+		),
+	)
 
-    fig.update_xaxes(
-        zeroline=True,
-        zerolinewidth=3,
-        zerolinecolor='black',
-        showgrid=True,
-        gridwidth=2,
-        gridcolor='gray',
-        linewidth=1,
-        linecolor='black',
-        mirror=True,
-        dtick=1,
+	fig.update_xaxes(
+		zeroline=True,
+		zerolinewidth=3,
+		zerolinecolor='black',
+		showgrid=True,
+		gridwidth=2,
+		gridcolor='gray',
+		linewidth=1,
+		linecolor='black',
+		mirror=True,
+		dtick=1,
 		range=[1.0,12.25]
-    )
+	)
 
-    fig.update_yaxes(
-        zeroline=True,
-        zerolinewidth=3,
-        zerolinecolor='black',
-        showgrid=True,
-        gridwidth=2,
-        gridcolor='gray',
-        linewidth=1,
-        linecolor='black',
-        mirror=True,
-        nticks=8,
+	fig.update_yaxes(
+		zeroline=True,
+		zerolinewidth=3,
+		zerolinecolor='black',
+		showgrid=True,
+		gridwidth=2,
+		gridcolor='gray',
+		linewidth=1,
+		linecolor='black',
+		mirror=True,
+		nticks=8,
 		range=[15.0, 55.0]
-    )
+	)
 
-    return fig
+	return fig
 
 
 # %%
@@ -415,7 +615,7 @@ def opt_dt_vs_x(df, x, grouping, opt_indep, opt_score, colours='Blues', extra_gr
 			colorscale=colours,
 			showscale=True,
 			colorbar={'title':grouping, 'nticks': 10, 'thickness': 18}
-    	),
+		),
 		showlegend=False
 	), layout=layout)
 	err_size_regr = LinearRegression()
@@ -505,7 +705,7 @@ def plotly_scatter(df, x, y, c, colourscheme='Viridis', trendline=False):
 			colorscale=colourscheme,
 			showscale=True,
 			colorbar={'title':'Null', 'nticks': 10, 'thickness': 18}
-    	)
+		)
 	), layout=layout)
 	if trendline:
 		fig.add_trace(
@@ -565,93 +765,93 @@ def plotly_scatter(df, x, y, c, colourscheme='Viridis', trendline=False):
 #%%
 
 def plotly_2lines(df1, x1, y1, df2, x2, y2, colours=('red', 'blue')):
-    layout = go.Layout(
-        plot_bgcolor='white',
-        yaxis2=dict(
-            overlaying='y',
-            side='right',
-            showgrid=False,
-            zeroline=False,
-            linewidth=1.5,
-            linecolor='black',
-            mirror=True,
-        )
-    )
+	layout = go.Layout(
+		plot_bgcolor='white',
+		yaxis2=dict(
+			overlaying='y',
+			side='right',
+			showgrid=False,
+			zeroline=False,
+			linewidth=1.5,
+			linecolor='black',
+			mirror=True,
+		)
+	)
 
-    fig = go.Figure(layout=layout)
+	fig = go.Figure(layout=layout)
 
-    # First line (left y-axis)
-    fig.add_trace(
-        go.Scatter(
-            x=df1[x1],
-            y=df1[y1],
-            mode='lines',
-            name=y1,
-            line=dict(color=colours[0], width=3, dash='dot'),
-        )
-    )
+	# First line (left y-axis)
+	fig.add_trace(
+		go.Scatter(
+			x=df1[x1],
+			y=df1[y1],
+			mode='lines',
+			name=y1,
+			line=dict(color=colours[0], width=3, dash='dot'),
+		)
+	)
 
-    # Second line (right y-axis)
-    fig.add_trace(
-        go.Scatter(
-            x=df2[x2],
-            y=df2[y2],
-            mode='lines',
-            name=y2,
-            # yaxis='y2',
-            line=dict(color=colours[1], width=3, dash='dash'),
-        )
-    )
+	# Second line (right y-axis)
+	fig.add_trace(
+		go.Scatter(
+			x=df2[x2],
+			y=df2[y2],
+			mode='lines',
+			name=y2,
+			# yaxis='y2',
+			line=dict(color=colours[1], width=3, dash='dash'),
+		)
+	)
 
-    fig.update_layout(
-        # xaxis_title=dict(text=label_lookup.get(x1, None), font=dict(size=24)),
-        yaxis_title=dict(text=y1, font=dict(size=24)),
-        yaxis2_title=dict(text=y2, font=dict(size=24)),
-        autosize=False,
-        height=400,
-        width=600,
-        margin=dict(l=0, r=0, t=0, b=0),
-        hovermode='closest',
-        font=dict(size=18),
-        legend=dict(
-            yanchor="top",
-            y=0.95,
-            xanchor="right",
-            x=0.95,
-            bordercolor='dimgrey',
-            borderwidth=2,
-        ),
-    )
+	fig.update_layout(
+		# xaxis_title=dict(text=label_lookup.get(x1, None), font=dict(size=24)),
+		yaxis_title=dict(text=y1, font=dict(size=24)),
+		yaxis2_title=dict(text=y2, font=dict(size=24)),
+		autosize=False,
+		height=400,
+		width=600,
+		margin=dict(l=0, r=0, t=0, b=0),
+		hovermode='closest',
+		font=dict(size=18),
+		legend=dict(
+			yanchor="top",
+			y=0.95,
+			xanchor="right",
+			x=0.95,
+			bordercolor='dimgrey',
+			borderwidth=2,
+		),
+	)
 
-    fig.update_xaxes(
-        zeroline=True,
-        zerolinewidth=2,
-        zerolinecolor='black',
-        showgrid=True,
-        gridwidth=1,
-        gridcolor='gray',
-        linewidth=1.5,
-        linecolor='black',
-        mirror=True,
-        nticks=13,
+	fig.update_xaxes(
+		zeroline=True,
+		zerolinewidth=2,
+		zerolinecolor='black',
+		showgrid=True,
+		gridwidth=1,
+		gridcolor='gray',
+		linewidth=1.5,
+		linecolor='black',
+		mirror=True,
+		nticks=13,
 		range=[1.0, 12.01]
-    )
+	)
 
-    fig.update_yaxes(
-        zeroline=True,
-        zerolinewidth=2,
-        zerolinecolor='black',
-        showgrid=True,
-        gridwidth=1,
-        gridcolor='gray',
-        nticks=10,
-        linewidth=1.5,
-        linecolor='black',
-        mirror=True,
+	fig.update_yaxes(
+		zeroline=True,
+		zerolinewidth=2,
+		zerolinecolor='black',
+		showgrid=True,
+		gridwidth=1,
+		gridcolor='gray',
+		nticks=10,
+		linewidth=1.5,
+		linecolor='black',
+		mirror=True,
 		# range=[0.0, 45.0]
-    )
+	)
 
-    return fig
+	return fig
 
 
 #%%
@@ -669,7 +869,7 @@ def demo_plot(df, x, y, c, lookup_df, colourscheme='Viridis'):
 			colorscale=colourscheme,
 			showscale=True,
 			colorbar={'title':c, 'nticks': 5, 'thickness': 14}
-    	),
+		),
 		name='Simulated data',
 	), layout=layout)
 
@@ -687,14 +887,14 @@ def demo_plot(df, x, y, c, lookup_df, colourscheme='Viridis'):
 			showscale=False,
 			colorscale='Greys',
 			# colorbar={'title':'BrdU time', 'nticks': 2, 'thickness': 10,}
-    	),
+		),
 		name='True mean'),
 		go.Scatter(x=neighbourhood_df[x], y=neighbourhood_df[y], mode='markers',
 		marker=dict(
 			size=2,
 			color='black',
 			symbol='circle-dot',
-    	),
+		),
 		name='Nearby true means'
 	)])
 
@@ -842,12 +1042,26 @@ preprint_df = pd.read_json('DPNL inference results.json') # Can take a while for
 # 	preprint_df[f'Relative error {k}'] = (preprint_df[k] - preprint_df[f'Mean inferred {k}'])/preprint_df[f'Std inferred {k}']
 # preprint_df['Total cells at end'] = preprint_df['Mean EdU+BrdU+']+preprint_df['Mean EdU-BrdU+']+preprint_df['Mean EdU+BrdU-']+preprint_df['Mean EdU-BrdU-']
 # preprint_df['Labelled fraction'] = 1 - preprint_df['Mean EdU-BrdU-']/preprint_df['Total cells at end']
+lookup_df = pd.read_json('DPNL lookup.json')
 
 '''
 PLOTTING BELOW
 Either run code from below or type in an interactive window
 '''
 
+if __name__ == '__main__':
+	fig = four_curve_plot(lookup_df, preprint_df, 'BrdU time', ['Mean EdU+BrdU-', 'Mean EdU-BrdU+', 'Mean EdU+BrdU+', 'Mean EdU-BrdU-'], err_prop=0)
+	fig.show()
+	# fig = four_curve_plot(lookup_df, preprint_df, 'BrdU time', ['Std EdU+BrdU-', 'Std EdU-BrdU+', 'Std EdU+BrdU+', 'Std EdU-BrdU-'],
+	# 	err_prop=0.1)
+	# fig.show()
+	# preprint_df['Relative absolute error tg1'] = np.abs((1/preprint_df['Mean inferred k1'] - preprint_df['tg1'])/preprint_df['tg1'])
+	# preprint_df['Relative absolute error ts'] = np.abs((1/preprint_df['Mean inferred k2'] - preprint_df['ts'])/preprint_df['ts'])
+	# fig = peak_splines(preprint_df, 'BrdU time', 'Relative absolute error tg1', 'tg1', 7, colours='Reds', extremum=None)
+	# fig.show()
+	# fig = peak_splines(preprint_df, 'BrdU time', 'Relative absolute error ts', 'ts', 7, colours='Blues', extremum=None)
+	# fig.show()
+	exit()
 #%%
 # correlation_plot(df, 'parameter-wise')
 #%%
@@ -859,8 +1073,8 @@ Either run code from below or type in an interactive window
 # %%
 # hex_opt_plot(df, 'tg1', 'ts', 'tg2m', 'BrdU time', 'SNR k2')
 # %%
-# peak_splines(df, 'BrdU time', 'SNR k2', 'ts', 7, 'Blues', extremum='max')
-peak_splines(df, 'BrdU time', 'SNR k1', 'tg1', 7, 'Reds', extremum='min')
+peak_splines(preprint_df, 'BrdU time', 'SNR k2', 'ts', 7, 'Blues', extremum='max')
+# peak_splines(df, 'BrdU time', 'SNR k1', 'tg1', 7, 'Reds', extremum='min')
 # %%
 opt_dt_vs_x(df, x='ts', grouping='tg1', opt_indep='BrdU time', opt_score='SNR k2')
 # %%
